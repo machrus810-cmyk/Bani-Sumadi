@@ -21,26 +21,59 @@ import {
   OperationType
 } from './firebase';
 
+import ImageCropperModal from './ImageCropperModal';
+
 // --- DATA SILSILAH AWAL (Mbah Sumadi, Istri 1 & Istri 2 tanpa form "Pasangan") ---
+export interface Spouse {
+  id: string | number;
+  name: string;
+  isAlive: boolean;
+  photo?: string;
+  birthDate?: string;
+  deathDate?: string;
+  domicile?: string;
+  phone?: string;
+}
+
 export interface Member {
   id: number;
   name: string;
   isAlive: boolean;
   gender: 'L' | 'P';
   parentId: number | null;
-  spouse: string;
+  spouse?: string;
   domicile: string;
   phone: string;
   birthDate: string;
   deathDate: string | null;
   photo: string;
-  spousePhoto: string;
-  spouseIsAlive: boolean;
-  spouseDomicile: string;
-  spousePhone: string;
-  spouseBirthDate: string;
-  spouseDeathDate: string;
+  spousePhoto?: string;
+  spouseIsAlive?: boolean;
+  spouseDomicile?: string;
+  spousePhone?: string;
+  spouseBirthDate?: string;
+  spouseDeathDate?: string;
+  spouses?: Spouse[];
 }
+
+export const getMemberSpouses = (m: Member): Spouse[] => {
+  if (m.spouses && Array.isArray(m.spouses) && m.spouses.length > 0) {
+    return m.spouses;
+  }
+  if (m.spouse && m.spouse.trim()) {
+    return [{
+      id: `legacy-${m.id}`,
+      name: m.spouse,
+      isAlive: m.spouseIsAlive ?? true,
+      photo: m.spousePhoto || '',
+      domicile: m.spouseDomicile || '',
+      phone: m.spousePhone || '',
+      birthDate: m.spouseBirthDate || '',
+      deathDate: m.spouseDeathDate || ''
+    }];
+  }
+  return [];
+};
 
 export interface Agenda {
   id: number;
@@ -480,26 +513,30 @@ function DashboardTab({
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
   const [isDeceasedModalOpen, setIsDeceasedModalOpen] = useState(false);
 
-  // MENGHITUNG STATISTIK MENYELURUH (Termasuk Pasangan)
+  // MENGHITUNG STATISTIK MENYELURUH (Termasuk Semua Pasangan)
   let totAnggota = 0;
   let totLaki = 0;
   let totPerempuan = 0;
   let totHidup = 0;
+  const deceasedMembers: Array<{ name: string; type: string }> = [];
+  const deceasedSpouses: Array<{ name: string; type: string }> = [];
 
   members.forEach(m => {
     totAnggota++;
     if (m.gender === 'L') totLaki++; else totPerempuan++;
-    if (m.isAlive) totHidup++;
+    if (m.isAlive) totHidup++; else deceasedMembers.push({ name: m.name, type: 'Anggota' });
 
-    if (m.spouse) {
+    const memberSpouses = getMemberSpouses(m);
+    memberSpouses.forEach((sp, idx) => {
       totAnggota++;
       if (m.gender === 'L') totPerempuan++; else totLaki++; // Pasangan gendernya berlawanan
-      if (m.spouseIsAlive) totHidup++;
-    }
+      if (sp.isAlive) totHidup++; else deceasedSpouses.push({ 
+        name: sp.name, 
+        type: memberSpouses.length > 1 ? `Pasangan ke-${idx + 1}` : 'Pasangan' 
+      });
+    });
   });
 
-  const deceasedMembers = members.filter(m => !m.isAlive).map(m => ({ name: m.name, type: 'Anggota' }));
-  const deceasedSpouses = members.filter(m => m.spouse && !m.spouseIsAlive).map(m => ({ name: m.spouse, type: 'Pasangan' }));
   const allDeceased = [...deceasedMembers, ...deceasedSpouses];
 
   useEffect(() => {
@@ -785,11 +822,47 @@ function PohonSilsilahTab({ members }: { members: Member[] }) {
 
   useEffect(() => { setZoom(1); setPosition({ x: 0, y: 0 }); }, []);
 
-  const handleProfileClick = (node: Member, isSpouse: boolean) => {
+  const handleProfileClick = (node: Member, isSpouse: boolean, spouseObj?: Spouse) => {
       if (!isSpouse) {
-          setSelectedProfile({ name: node.name, isAlive: node.isAlive, gender: node.gender, photo: node.photo, birthDate: node.birthDate, deathDate: node.deathDate, domicile: node.domicile, phone: node.phone, spouse: node.spouse, parentName: members.find(m => m.id === node.parentId)?.name || '-' });
+          const spouseNames = getMemberSpouses(node).map(s => s.name).filter(Boolean).join(', ');
+          setSelectedProfile({ 
+            name: node.name, 
+            isAlive: node.isAlive, 
+            gender: node.gender, 
+            photo: node.photo, 
+            birthDate: node.birthDate, 
+            deathDate: node.deathDate, 
+            domicile: node.domicile, 
+            phone: node.phone, 
+            spouse: spouseNames || '-', 
+            parentName: members.find(m => m.id === node.parentId)?.name || '-' 
+          });
+      } else if (spouseObj) {
+          setSelectedProfile({ 
+            name: spouseObj.name, 
+            isAlive: spouseObj.isAlive, 
+            gender: node.gender === 'L' ? 'P' : 'L', 
+            photo: spouseObj.photo || '', 
+            birthDate: spouseObj.birthDate || '', 
+            deathDate: spouseObj.deathDate || '', 
+            domicile: spouseObj.domicile || '', 
+            phone: spouseObj.phone || '', 
+            spouse: node.name, 
+            parentName: '-' 
+          });
       } else {
-          setSelectedProfile({ name: node.spouse, isAlive: node.spouseIsAlive, gender: node.gender === 'L' ? 'P' : 'L', photo: node.spousePhoto, birthDate: node.spouseBirthDate, deathDate: node.spouseDeathDate, domicile: node.spouseDomicile, phone: node.spousePhone, spouse: node.name, parentName: '-' });
+          setSelectedProfile({ 
+            name: node.spouse || '', 
+            isAlive: node.spouseIsAlive ?? true, 
+            gender: node.gender === 'L' ? 'P' : 'L', 
+            photo: node.spousePhoto || '', 
+            birthDate: node.spouseBirthDate || '', 
+            deathDate: node.spouseDeathDate || '', 
+            domicile: node.spouseDomicile || '', 
+            phone: node.spousePhone || '', 
+            spouse: node.name, 
+            parentName: '-' 
+          });
       }
   };
 
@@ -868,13 +941,14 @@ function TreeNode({
   hideSpouse = false 
 }: { 
   node: TreeNodeData; 
-  onOpenProfile: (n: Member, isSpouse: boolean) => void; 
+  onOpenProfile: (n: Member, isSpouse: boolean, spouseObj?: Spouse) => void; 
   isRoot: boolean; 
   globalExpandAll: boolean; 
   hideSpouse?: boolean;
 }) {
   const [isExpanded, setIsExpanded] = useState(true);
   const hasChildren = node.children && node.children.length > 0;
+  const spouses = getMemberSpouses(node);
 
   useEffect(() => { setIsExpanded(globalExpandAll); }, [globalExpandAll]);
 
@@ -884,7 +958,7 @@ function TreeNode({
         
         {!isRoot && <div className="absolute -top-6 left-1/2 w-[2px] h-6 bg-emerald-500 -translate-x-1/2"></div>}
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-center">
           {/* ANGGOTA UTAMA */}
           <div className="flex flex-col items-center cursor-pointer hover:bg-gray-50 p-1.5 rounded-xl transition w-[90px]" onClick={(e) => { e.stopPropagation(); onOpenProfile(node, false); }}>
              <div className="relative">
@@ -896,21 +970,29 @@ function TreeNode({
              <p className={`font-bold text-[10px] text-center leading-tight line-clamp-2 ${node.gender === 'L' ? 'text-blue-800' : 'text-pink-800'}`}>{node.name}</p>
           </div>
 
-          {/* PASANGAN */}
-          {!hideSpouse && node.spouse && (
-            <>
-              <div className="text-emerald-500 font-bold text-sm">+</div>
-              <div className="flex flex-col items-center cursor-pointer hover:bg-gray-50 p-1.5 rounded-xl transition w-[90px]" onClick={(e) => { e.stopPropagation(); onOpenProfile(node, true); }}>
+          {/* DAFTAR PASANGAN (BISA LEBIH DARI SATU) */}
+          {!hideSpouse && spouses.map((sp, sIdx) => (
+            <React.Fragment key={sp.id || sIdx}>
+              <div className="text-emerald-500 font-bold text-sm select-none">+</div>
+              <div 
+                className="flex flex-col items-center cursor-pointer hover:bg-gray-50 p-1.5 rounded-xl transition w-[90px]" 
+                onClick={(e) => { e.stopPropagation(); onOpenProfile(node, true, sp); }}
+              >
                  <div className="relative">
-                   {!node.spouseIsAlive && <span className="absolute -top-1 -right-1 bg-gray-600 text-white text-[8px] font-bold px-1 py-0.5 rounded z-20">ALM</span>}
+                   {!sp.isAlive && <span className="absolute -top-1 -right-1 bg-gray-600 text-white text-[8px] font-bold px-1 py-0.5 rounded z-20">ALM</span>}
                    <div className={`w-12 h-12 rounded-full flex items-center justify-center border shadow-sm overflow-hidden mb-1.5 ${node.gender === 'L' ? 'bg-pink-50 text-pink-500 border-pink-200' : 'bg-blue-50 text-blue-500 border-blue-200'} flex-shrink-0`}>
-                     {node.spousePhoto ? <img src={node.spousePhoto} className="w-full h-full object-cover" alt={node.spouse} /> : <Users size={20} />}
+                     {sp.photo ? <img src={sp.photo} className="w-full h-full object-cover" alt={sp.name} /> : <Users size={20} />}
                    </div>
                  </div>
-                 <p className={`font-bold text-[10px] text-center leading-tight line-clamp-2 ${node.gender === 'L' ? 'text-pink-800' : 'text-blue-800'}`}>{node.spouse}</p>
+                 <p className={`font-bold text-[10px] text-center leading-tight line-clamp-2 ${node.gender === 'L' ? 'text-pink-800' : 'text-blue-800'}`}>{sp.name}</p>
+                 {spouses.length > 1 && (
+                   <span className="text-[8px] text-gray-400 font-semibold mt-0.5">
+                     {node.gender === 'L' ? `Istri ${sIdx + 1}` : `Suami ${sIdx + 1}`}
+                   </span>
+                 )}
               </div>
-            </>
-          )}
+            </React.Fragment>
+          ))}
         </div>
 
         {/* Tombol Expand/Collapse */}
@@ -995,14 +1077,56 @@ function AnggotaTab({ members, isAdmin, showToast }: { members: Member[]; isAdmi
   const [selectedProfile, setSelectedProfile] = useState<ProfileData | null>(null);
   const [itemToDelete, setItemToDelete] = useState<number | null>(null);
 
-  const filtered = members.filter(m => m.name.toLowerCase().includes(searchTerm.toLowerCase()) || (m.spouse && m.spouse.toLowerCase().includes(searchTerm.toLowerCase())));
+  const filtered = members.filter(m => {
+    const q = searchTerm.toLowerCase();
+    const matchSelf = m.name.toLowerCase().includes(q) || (m.domicile && m.domicile.toLowerCase().includes(q));
+    const spouses = getMemberSpouses(m);
+    const matchSpouse = spouses.some(s => s.name.toLowerCase().includes(q) || (s.domicile && s.domicile.toLowerCase().includes(q)));
+    return matchSelf || matchSpouse;
+  });
 
-  const openProfile = (member: Member, isSpouse: boolean) => {
-      if (!isSpouse) {
-          setSelectedProfile({ name: member.name, isAlive: member.isAlive, gender: member.gender, photo: member.photo, birthDate: member.birthDate, deathDate: member.deathDate, domicile: member.domicile, phone: member.phone, spouse: member.spouse, parentName: members.find(m => m.id === member.parentId)?.name || '-' });
-      } else {
-          setSelectedProfile({ name: member.spouse, isAlive: member.spouseIsAlive, gender: member.gender === 'L' ? 'P' : 'L', photo: member.spousePhoto, birthDate: member.spouseBirthDate, deathDate: member.spouseDeathDate, domicile: member.spouseDomicile, phone: member.spousePhone, spouse: member.name, parentName: '-' });
-      }
+  const openProfile = (member: Member, isSpouse: boolean, spouseObj?: Spouse) => {
+    if (!isSpouse) {
+      const spouseNames = getMemberSpouses(member).map(s => s.name).filter(Boolean).join(', ');
+      setSelectedProfile({ 
+        name: member.name, 
+        isAlive: member.isAlive, 
+        gender: member.gender, 
+        photo: member.photo, 
+        birthDate: member.birthDate, 
+        deathDate: member.deathDate, 
+        domicile: member.domicile, 
+        phone: member.phone, 
+        spouse: spouseNames || '-', 
+        parentName: members.find(m => m.id === member.parentId)?.name || '-' 
+      });
+    } else if (spouseObj) {
+      setSelectedProfile({ 
+        name: spouseObj.name, 
+        isAlive: spouseObj.isAlive, 
+        gender: member.gender === 'L' ? 'P' : 'L', 
+        photo: spouseObj.photo || '', 
+        birthDate: spouseObj.birthDate || '', 
+        deathDate: spouseObj.deathDate || '', 
+        domicile: spouseObj.domicile || '', 
+        phone: spouseObj.phone || '', 
+        spouse: member.name, 
+        parentName: '-' 
+      });
+    } else {
+      setSelectedProfile({ 
+        name: member.spouse || '', 
+        isAlive: member.spouseIsAlive ?? true, 
+        gender: member.gender === 'L' ? 'P' : 'L', 
+        photo: member.spousePhoto || '', 
+        birthDate: member.spouseBirthDate || '', 
+        deathDate: member.spouseDeathDate || '', 
+        domicile: member.spouseDomicile || '', 
+        phone: member.spousePhone || '', 
+        spouse: member.name, 
+        parentName: '-' 
+      });
+    }
   };
 
   const executeDelete = async (id: number) => {
@@ -1021,59 +1145,137 @@ function AnggotaTab({ members, isAdmin, showToast }: { members: Member[]; isAdmi
 
   return (
     <div className="space-y-4 pb-6">
-      <div className="flex justify-between items-center mb-2"><h2 className="text-xl font-bold text-gray-800">Daftar Anggota</h2></div>
-      {isAdmin && <button onClick={() => {setEditingItem(null); setIsModalOpen(true);}} className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3.5 rounded-xl shadow-md transition flex justify-center cursor-pointer"><Plus size={20} className="mr-2"/> Tambah Anggota</button>}
+      <div className="flex justify-between items-center mb-2">
+        <h2 className="text-xl font-bold text-gray-800">Daftar Anggota</h2>
+      </div>
+      {isAdmin && (
+        <button 
+          onClick={() => { setEditingItem(null); setIsModalOpen(true); }} 
+          className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3.5 rounded-xl shadow-md transition flex justify-center cursor-pointer items-center"
+        >
+          <Plus size={20} className="mr-2"/> Tambah Anggota
+        </button>
+      )}
       
       <div className="relative">
         <Search className="absolute left-3 top-3.5 text-gray-400" size={20} />
-        <input className="w-full pl-10 pr-4 py-3.5 rounded-xl border border-gray-200 outline-none focus:border-green-500 font-medium" placeholder="Cari nama anggota atau pasangan..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+        <input 
+          className="w-full pl-10 pr-4 py-3.5 rounded-xl border border-gray-200 outline-none focus:border-green-500 font-medium bg-white" 
+          placeholder="Cari nama anggota atau pasangan..." 
+          value={searchTerm} 
+          onChange={e => setSearchTerm(e.target.value)} 
+        />
       </div>
       
       <div className="space-y-4">
-        {filtered.map(member => (
-          <div key={member.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-            <div className="flex gap-4 items-start relative z-10">
-              <div className={`w-16 h-16 rounded-full border-2 flex-shrink-0 flex items-center justify-center overflow-hidden cursor-pointer hover:opacity-80 transition ${member.gender === 'L' ? 'border-blue-100 bg-blue-50 text-blue-400' : 'border-pink-100 bg-pink-50 text-pink-400'}`} onClick={() => openProfile(member, false)}>
-                {member.photo ? <img src={member.photo} className="w-full h-full object-cover" alt={member.name} /> : <Users size={30} />}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex justify-between">
-                   <h3 className="font-bold text-lg text-gray-800 truncate pr-2">{member.name}</h3>
-                   {isAdmin && (
-                     <div className="flex gap-1.5 flex-shrink-0">
-                       <button onClick={() => {setEditingItem(member); setIsModalOpen(true);}} className="text-blue-500 bg-blue-50 p-1.5 rounded-lg cursor-pointer"><Edit2 size={14}/></button>
-                       <button onClick={() => setItemToDelete(member.id)} className="text-red-500 bg-red-50 p-1.5 rounded-lg cursor-pointer"><Trash2 size={14}/></button>
-                     </div>
-                   )}
-                </div>
-                <div className="mt-1 mb-2"><span className={`text-[9px] font-black px-2 py-0.5 rounded-full border ${member.isAlive ? 'text-green-600 bg-green-50 border-green-200' : 'text-gray-500 bg-gray-100 border-gray-200'}`}>{member.isAlive ? 'HIDUP' : 'ALM'}</span></div>
-                <div className="text-[11px] text-gray-600 space-y-1">
-                  <p className="truncate">Ortu: <span className="font-semibold text-gray-800">{members.find(m => m.id === member.parentId)?.name || '-'}</span></p>
-                  <p className="break-words">Domisili: <span className="font-semibold text-gray-800">{member.domicile || '-'}</span></p>
-                  <p className="break-words">No HP: <span className="font-semibold text-gray-800">{member.phone || '-'}</span></p>
-                </div>
-              </div>
-            </div>
+        {filtered.map(member => {
+          const memberSpouses = getMemberSpouses(member);
 
-            {member.spouse && (
-              <div className="mt-4 pt-4 border-t border-gray-100 flex gap-3 items-start pl-2">
-                <div className={`w-10 h-10 rounded-full border-2 flex-shrink-0 flex items-center justify-center overflow-hidden cursor-pointer hover:opacity-80 transition ${member.gender === 'L' ? 'border-pink-100 bg-pink-50 text-pink-400' : 'border-blue-100 bg-blue-50 text-blue-400'}`} onClick={() => openProfile(member, true)}>
-                   {member.spousePhoto ? <img src={member.spousePhoto} className="w-full h-full object-cover" alt={member.spouse} /> : <Users size={20} />}
+          return (
+            <div key={member.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 transition hover:shadow-md">
+              <div className="flex gap-4 items-start relative z-10">
+                <div 
+                  className={`w-16 h-16 rounded-full border-2 flex-shrink-0 flex items-center justify-center overflow-hidden cursor-pointer hover:opacity-85 transition shadow-sm ${member.gender === 'L' ? 'border-blue-200 bg-blue-50 text-blue-500' : 'border-pink-200 bg-pink-50 text-pink-500'}`} 
+                  onClick={() => openProfile(member, false)}
+                  title="Lihat profil lengkap"
+                >
+                  {member.photo ? <img src={member.photo} className="w-full h-full object-cover" alt={member.name} /> : <Users size={30} />}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="font-bold text-sm text-gray-800 truncate">{member.spouse}</p>
-                    <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full border ${member.spouseIsAlive ? 'text-green-600 bg-green-50 border-green-200' : 'text-gray-500 bg-gray-100 border-gray-200'}`}>{member.spouseIsAlive ? 'HIDUP' : 'ALM'}</span>
+                  <div className="flex justify-between items-start">
+                     <h3 
+                       className="font-bold text-lg text-gray-800 truncate pr-2 cursor-pointer hover:text-green-700" 
+                       onClick={() => openProfile(member, false)}
+                     >
+                       {member.name}
+                     </h3>
+                     {isAdmin && (
+                       <div className="flex gap-1.5 flex-shrink-0">
+                         <button 
+                           onClick={() => { setEditingItem(member); setIsModalOpen(true); }} 
+                           className="text-blue-600 bg-blue-50 hover:bg-blue-100 p-1.5 rounded-lg cursor-pointer transition"
+                           title="Edit Anggota"
+                         >
+                           <Edit2 size={14}/>
+                         </button>
+                         <button 
+                           onClick={() => setItemToDelete(member.id)} 
+                           className="text-red-600 bg-red-50 hover:bg-red-100 p-1.5 rounded-lg cursor-pointer transition"
+                           title="Hapus Anggota"
+                         >
+                           <Trash2 size={14}/>
+                         </button>
+                       </div>
+                     )}
                   </div>
-                  <div className="text-[10px] text-gray-500 space-y-0.5 mt-1">
-                    <p className="break-words">📍 {member.spouseDomicile || '-'}</p>
-                    <p className="break-words">📞 {member.spousePhone || '-'}</p>
+                  <div className="mt-1 mb-2 flex items-center gap-2">
+                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full border ${member.isAlive ? 'text-green-600 bg-green-50 border-green-200' : 'text-gray-500 bg-gray-100 border-gray-200'}`}>
+                      {member.isAlive ? 'HIDUP' : 'ALM'}
+                    </span>
+                    <span className="text-[10px] text-gray-400 font-semibold">
+                      {member.gender === 'L' ? 'Laki-laki' : 'Perempuan'}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-gray-600 space-y-1">
+                    <p className="truncate">Ortu: <span className="font-semibold text-gray-800">{members.find(m => m.id === member.parentId)?.name || '-'}</span></p>
+                    <p className="break-words">Domisili: <span className="font-semibold text-gray-800">{member.domicile || '-'}</span></p>
+                    {member.phone && member.phone !== '-' && (
+                      <p className="break-words">No HP: <span className="font-semibold text-gray-800">{member.phone}</span></p>
+                    )}
                   </div>
                 </div>
               </div>
-            )}
-          </div>
-        ))}
+
+              {/* SEMUA PASANGAN ANGGOTA (BISA > 1 PASANGAN) */}
+              {memberSpouses.length > 0 && (
+                <div className="mt-3.5 pt-3 border-t border-gray-100 space-y-2.5">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-gray-500 px-1">
+                    <span>Pasangan ({memberSpouses.length}):</span>
+                    {memberSpouses.length > 1 && (
+                      <span className="text-[10px] text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
+                        {memberSpouses.length} Pasangan
+                      </span>
+                    )}
+                  </div>
+
+                  {memberSpouses.map((sp, sIdx) => (
+                    <div key={sp.id || sIdx} className="bg-gray-50/80 p-2.5 rounded-xl border border-gray-150 flex gap-3 items-center">
+                      <div 
+                        className={`w-11 h-11 rounded-full border-2 flex-shrink-0 flex items-center justify-center overflow-hidden cursor-pointer hover:opacity-80 transition shadow-sm ${member.gender === 'L' ? 'border-pink-200 bg-pink-50 text-pink-500' : 'border-blue-200 bg-blue-50 text-blue-500'}`} 
+                        onClick={() => openProfile(member, true, sp)}
+                        title="Klik untuk melihat profil pasangan"
+                      >
+                         {sp.photo ? <img src={sp.photo} className="w-full h-full object-cover" alt={sp.name} /> : <Users size={20} />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p 
+                            className="font-bold text-sm text-gray-800 truncate cursor-pointer hover:text-green-700" 
+                            onClick={() => openProfile(member, true, sp)}
+                          >
+                            {sp.name}
+                          </p>
+                          <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full border ${sp.isAlive ? 'text-green-600 bg-green-50 border-green-200' : 'text-gray-500 bg-gray-100 border-gray-200'}`}>
+                            {sp.isAlive ? 'HIDUP' : 'ALM'}
+                          </span>
+                          {memberSpouses.length > 1 && (
+                            <span className="text-[9px] bg-purple-100 text-purple-800 border border-purple-200 font-bold px-1.5 py-0.2 rounded">
+                              {member.gender === 'L' ? `Istri ${sIdx + 1}` : `Suami ${sIdx + 1}`}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-gray-500 flex flex-wrap gap-x-3 mt-0.5">
+                          {sp.domicile && <span className="truncate">📍 {sp.domicile}</span>}
+                          {sp.phone && sp.phone !== '-' && <span className="truncate">📞 {sp.phone}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
         {filtered.length === 0 && <p className="text-center text-gray-400 py-10 text-sm">Tidak ada data.</p>}
       </div>
 
@@ -1084,24 +1286,177 @@ function AnggotaTab({ members, isAdmin, showToast }: { members: Member[]; isAdmi
   );
 }
 
-function ModalFormAnggota({ member, members, showToast, onClose }: { member: Member | null; members: Member[]; showToast: (m: string, t?: 'success' | 'error') => void; onClose: () => void }) {
-  const [formData, setFormData] = useState<Partial<Member>>(member || { name:'', isAlive:true, gender:'L', parentId: null, spouse:'', domicile:'', phone:'', birthDate:'', deathDate:'', photo:'', spousePhoto:'', spouseIsAlive:true, spouseDomicile:'', spousePhone:'', spouseBirthDate:'', spouseDeathDate:'' });
-  
+function ModalFormAnggota({ 
+  member, 
+  members, 
+  showToast, 
+  onClose 
+}: { 
+  member: Member | null; 
+  members: Member[]; 
+  showToast: (m: string, t?: 'success' | 'error') => void; 
+  onClose: () => void;
+}) {
+  const [formData, setFormData] = useState<Partial<Member>>(member || { 
+    name: '', 
+    isAlive: true, 
+    gender: 'L', 
+    parentId: null, 
+    spouse: '', 
+    domicile: '', 
+    phone: '', 
+    birthDate: '', 
+    deathDate: '', 
+    photo: '', 
+    spousePhoto: '', 
+    spouseIsAlive: true, 
+    spouseDomicile: '', 
+    spousePhone: '', 
+    spouseBirthDate: '', 
+    spouseDeathDate: '' 
+  });
+
+  // State untuk multi-pasangan
+  const [spousesList, setSpousesList] = useState<Spouse[]>(() => {
+    if (member) {
+      const sp = getMemberSpouses(member);
+      if (sp.length > 0) {
+        return sp.map(s => ({ ...s }));
+      }
+    }
+    return [];
+  });
+
+  // State untuk modal crop gambar
+  const [cropperModal, setCropperModal] = useState<{
+    imageSrc: string;
+    target: 'member' | 'spouse';
+    spouseIndex?: number;
+    title: string;
+  } | null>(null);
+
+  const memberFileInputRef = useRef<HTMLInputElement | null>(null);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
-  }; 
+  };
+
+  // Handler pilih foto anggota utama -> picu cropping modal
+  const handleMemberPhotoFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setCropperModal({
+          imageSrc: reader.result as string,
+          target: 'member',
+          title: 'Sesuaikan & Potong Foto Anggota'
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+    e.target.value = '';
+  };
+
+  // Handler pilih foto pasangan -> picu cropping modal
+  const handleSpousePhotoFile = (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setCropperModal({
+          imageSrc: reader.result as string,
+          target: 'spouse',
+          spouseIndex: index,
+          title: `Sesuaikan & Potong Foto Pasangan ${spousesList.length > 1 ? `#${index + 1}` : ''}`
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+    e.target.value = '';
+  };
+
+  // Hasil potong foto dari ImageCropperModal
+  const handleApplyCrop = (croppedBase64: string) => {
+    if (!cropperModal) return;
+    if (cropperModal.target === 'member') {
+      setFormData(prev => ({ ...prev, photo: croppedBase64 }));
+    } else if (cropperModal.target === 'spouse' && cropperModal.spouseIndex !== undefined) {
+      const idx = cropperModal.spouseIndex;
+      setSpousesList(prev => {
+        const copy = [...prev];
+        copy[idx] = { ...copy[idx], photo: croppedBase64 };
+        return copy;
+      });
+    }
+    setCropperModal(null);
+  };
+
+  // Manajemen daftar pasangan
+  const handleAddSpouse = () => {
+    const newSpouse: Spouse = {
+      id: `sp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      name: '',
+      isAlive: true,
+      photo: '',
+      birthDate: '',
+      deathDate: '',
+      domicile: '',
+      phone: ''
+    };
+    setSpousesList(prev => [...prev, newSpouse]);
+  };
+
+  const handleRemoveSpouse = (index: number) => {
+    setSpousesList(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSpouseChange = (index: number, field: keyof Spouse, value: any) => {
+    setSpousesList(prev => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: value };
+      return copy;
+    });
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       const id = member ? member.id : Date.now();
-      const payload = {
-        ...formData, 
+      
+      // Bersihkan data pasangan yang diinput
+      const cleanSpouses = spousesList
+        .filter(s => s.name && s.name.trim() !== '')
+        .map(s => ({
+          ...s,
+          name: s.name.trim(),
+          isAlive: s.isAlive ?? true,
+          photo: s.photo || '',
+          birthDate: s.birthDate || '',
+          deathDate: !s.isAlive ? (s.deathDate || '') : '',
+          domicile: s.domicile || '',
+          phone: s.phone || ''
+        }));
+
+      const primarySpouse = cleanSpouses[0];
+
+      const payload: Member = {
+        ...formData as any,
         id, 
-        parentId: formData.parentId ? Number(formData.parentId) : null
+        parentId: formData.parentId ? Number(formData.parentId) : null,
+        spouses: cleanSpouses,
+        // Backward compatibility dengan data pasangan tunggal lama
+        spouse: primarySpouse ? primarySpouse.name : '',
+        spousePhoto: primarySpouse ? (primarySpouse.photo || '') : '',
+        spouseIsAlive: primarySpouse ? (primarySpouse.isAlive ?? true) : true,
+        spouseDomicile: primarySpouse ? (primarySpouse.domicile || '') : '',
+        spousePhone: primarySpouse ? (primarySpouse.phone || '') : '',
+        spouseBirthDate: primarySpouse ? (primarySpouse.birthDate || '') : '',
+        spouseDeathDate: primarySpouse ? (primarySpouse.deathDate || '') : ''
       };
+
       await setDoc(getDocRef('members', id), payload);
-      showToast('Data Anggota berhasil disimpan di Firebase', 'success');
+      showToast('Data Anggota & Pasangan berhasil disimpan di Firebase', 'success');
       onClose();
     } catch (err) { 
       handleFirestoreError(err, OperationType.WRITE, 'members');
@@ -1109,67 +1464,398 @@ function ModalFormAnggota({ member, members, showToast, onClose }: { member: Mem
     }
   };
 
-  // LOGIKA DINAMIS: Sembunyikan isian pasangan JIKA dia adalah Akar (Generasi 1) atau Istri Akar
-  const isParentRoot = members.find(m => m.id === Number(formData.parentId))?.parentId === null;
-  const isSpecialRoot = !formData.parentId || (isParentRoot && formData.gender === 'P');
-
   return (
-    <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl relative">
-        <div className="p-4 border-b flex justify-between items-center sticky top-0 bg-white z-20"><h2 className="font-bold text-green-700 text-sm">{member ? 'Edit Anggota' : 'Tambah Anggota'}</h2><button onClick={onClose} className="cursor-pointer"><X size={20}/></button></div>
-        <form onSubmit={handleSave} className="p-5 space-y-4">
-          <div className="flex flex-col items-center">
-             <div className="relative w-20 h-20 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden mb-2">
-                {formData.photo ? <img src={formData.photo} className="w-full h-full object-cover" alt="Avatar" /> : <Camera size={20} className="text-gray-400"/>}
-                <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, (base64) => setFormData({...formData, photo: base64}))} className="absolute inset-0 opacity-0 cursor-pointer" />
-             </div>
-             {formData.photo && <button type="button" onClick={() => setFormData({...formData, photo: ''})} className="text-[10px] text-red-500 font-bold cursor-pointer">Hapus Foto</button>}
-          </div>
-          <div><label className="block text-xs font-bold text-gray-500 mb-1">Nama Lengkap</label><input name="name" value={formData.name || ''} onChange={handleChange} required className="w-full border-2 p-3 rounded-xl outline-none focus:border-green-500" /></div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className="block text-xs font-bold text-gray-500 mb-1">Gender</label><select name="gender" value={formData.gender || 'L'} onChange={handleChange} className="w-full border-2 p-3 rounded-xl bg-white"><option value="L">Laki-laki</option><option value="P">Perempuan</option></select></div>
-            <div><label className="block text-xs font-bold text-gray-500 mb-1">Status</label><select name="isAlive" value={formData.isAlive?.toString() ?? 'true'} onChange={(e) => setFormData({...formData, isAlive: e.target.value === 'true'})} className="w-full border-2 p-3 rounded-xl bg-white"><option value="true">Hidup</option><option value="false">Meninggal</option></select></div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className="block text-xs font-bold text-gray-500 mb-1">Lahir</label><input type="date" name="birthDate" value={formData.birthDate || ''} onChange={handleChange} className="w-full border-2 p-3 rounded-xl text-xs" /></div>
-            {!formData.isAlive && <div><label className="block text-xs font-bold text-red-500 mb-1">Wafat</label><input type="date" name="deathDate" value={formData.deathDate || ''} onChange={handleChange} className="w-full border-2 border-red-200 p-3 rounded-xl text-xs" /></div>}
-          </div>
-          <div><label className="block text-xs font-bold text-gray-500 mb-1">Orang Tua (Silsilah)</label><select name="parentId" value={formData.parentId ?? ''} onChange={handleChange} className="w-full border-2 p-3 rounded-xl bg-white text-sm"><option value="">-- Generasi Pertama (Kosong) --</option>{members.filter(m => m.id !== formData.id).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className="block text-xs font-bold text-gray-500 mb-1">Domisili (Kota)</label><input name="domicile" value={formData.domicile || ''} onChange={handleChange} className="w-full border-2 p-3 rounded-xl" /></div>
-            <div><label className="block text-xs font-bold text-gray-500 mb-1">No HP</label><input name="phone" value={formData.phone || ''} onChange={handleChange} className="w-full border-2 p-3 rounded-xl" /></div>
-          </div>
+    <>
+      <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl relative">
           
-          {!isSpecialRoot && (
-            <div className={`p-4 border-2 rounded-2xl ${formData.spouse ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'}`}>
-              <p className="text-xs font-bold mb-2">Data Pasangan (Kosongkan jika tak ada)</p>
-              <input name="spouse" placeholder="Nama pasangan..." value={formData.spouse || ''} onChange={handleChange} className="w-full border-2 p-3 rounded-xl" />
-              {formData.spouse && (
-                <div className="mt-3 space-y-3">
-                  <div className="flex items-center gap-3">
-                    <div className="relative w-12 h-12 rounded-full border-2 bg-white flex items-center justify-center overflow-hidden">
-                      {formData.spousePhoto ? <img src={formData.spousePhoto} className="w-full h-full object-cover" alt="Spouse" /> : <Camera size={14}/>}
-                      <input type="file" onChange={(e) => handleImageUpload(e, (base64) => setFormData({...formData, spousePhoto: base64}))} className="absolute inset-0 opacity-0 cursor-pointer" />
+          {/* HEADER MODAL */}
+          <div className="p-4 border-b flex justify-between items-center sticky top-0 bg-white z-20 shadow-xs">
+            <h2 className="font-bold text-green-700 text-sm">
+              {member ? 'Edit Anggota Keluarga' : 'Tambah Anggota Keluarga'}
+            </h2>
+            <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full cursor-pointer transition">
+              <X size={20}/>
+            </button>
+          </div>
+
+          <form onSubmit={handleSave} className="p-5 space-y-4">
+            
+            {/* FOTO ANGGOTA DENGAN FITUR CROP */}
+            <div className="flex flex-col items-center bg-gray-50 p-4 rounded-2xl border border-gray-100">
+               <div className="relative w-24 h-24 rounded-full bg-white border-2 border-dashed border-green-400 flex items-center justify-center overflow-hidden mb-2 shadow-sm group">
+                  {formData.photo ? (
+                    <img src={formData.photo} className="w-full h-full object-cover" alt="Foto Anggota" />
+                  ) : (
+                    <div className="flex flex-col items-center text-gray-400">
+                      <Camera size={26} className="text-green-600 mb-0.5"/>
+                      <span className="text-[9px] font-semibold">Pilih Foto</span>
                     </div>
-                    <p className="text-[10px] font-bold text-blue-700">Foto Pasangan</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <select name="spouseIsAlive" value={formData.spouseIsAlive?.toString() ?? 'true'} onChange={(e) => setFormData({...formData, spouseIsAlive: e.target.value === 'true'})} className="w-full border p-2 rounded-xl text-xs bg-white"><option value="true">Hidup</option><option value="false">Meninggal</option></select>
-                    <input name="spousePhone" placeholder="No HP" value={formData.spousePhone || ''} onChange={handleChange} className="w-full border p-2 rounded-xl text-xs" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                     <input type="date" name="spouseBirthDate" value={formData.spouseBirthDate || ''} onChange={handleChange} className="w-full border p-2 rounded-xl text-[10px]" />
-                     {!formData.spouseIsAlive && <input type="date" name="spouseDeathDate" value={formData.spouseDeathDate || ''} onChange={handleChange} className="w-full border border-red-200 p-2 rounded-xl text-[10px]" />}
-                  </div>
-                  <input name="spouseDomicile" placeholder="Domisili Pasangan" value={formData.spouseDomicile || ''} onChange={handleChange} className="w-full border p-2 rounded-xl text-xs" />
+                  )}
+                  <input 
+                    ref={memberFileInputRef}
+                    type="file" 
+                    accept="image/*" 
+                    onChange={handleMemberPhotoFile} 
+                    className="absolute inset-0 opacity-0 cursor-pointer" 
+                    title="Pilih gambar untuk dipotong"
+                  />
+               </div>
+
+               <div className="flex items-center gap-2">
+                 <button 
+                   type="button" 
+                   onClick={() => memberFileInputRef.current?.click()}
+                   className="text-xs bg-green-50 text-green-700 font-bold px-3 py-1.5 rounded-xl border border-green-200 hover:bg-green-100 transition cursor-pointer flex items-center gap-1"
+                 >
+                   <Camera size={13} />
+                   <span>{formData.photo ? 'Ganti & Potong Foto' : 'Unggah & Potong Foto'}</span>
+                 </button>
+                 {formData.photo && (
+                   <button 
+                     type="button" 
+                     onClick={() => setFormData(prev => ({ ...prev, photo: '' }))} 
+                     className="text-xs text-red-600 font-bold hover:bg-red-50 px-2 py-1.5 rounded-xl transition cursor-pointer"
+                   >
+                     Hapus
+                   </button>
+                 )}
+               </div>
+               <p className="text-[10px] text-gray-400 mt-1">Format foto otomatis dicrop lingkaran rapi</p>
+            </div>
+
+            {/* NAMA LENGKAP */}
+            <div>
+              <label className="block text-xs font-bold text-gray-600 mb-1">Nama Lengkap *</label>
+              <input 
+                name="name" 
+                value={formData.name || ''} 
+                onChange={handleChange} 
+                required 
+                placeholder="Contoh: Ahmad Sumadi"
+                className="w-full border-2 p-3 rounded-xl outline-none focus:border-green-500 font-medium" 
+              />
+            </div>
+
+            {/* GENDER & STATUS */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">Jenis Kelamin</label>
+                <select 
+                  name="gender" 
+                  value={formData.gender || 'L'} 
+                  onChange={handleChange} 
+                  className="w-full border-2 p-3 rounded-xl bg-white font-medium outline-none focus:border-green-500"
+                >
+                  <option value="L">Laki-laki</option>
+                  <option value="P">Perempuan</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">Status Kehidupan</label>
+                <select 
+                  name="isAlive" 
+                  value={formData.isAlive?.toString() ?? 'true'} 
+                  onChange={(e) => setFormData(prev => ({ ...prev, isAlive: e.target.value === 'true' }))} 
+                  className="w-full border-2 p-3 rounded-xl bg-white font-medium outline-none focus:border-green-500"
+                >
+                  <option value="true">Masih Hidup</option>
+                  <option value="false">Meninggal (Alm)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* TANGGAL LAHIR & WAFAT */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">Tanggal Lahir</label>
+                <input 
+                  type="date" 
+                  name="birthDate" 
+                  value={formData.birthDate || ''} 
+                  onChange={handleChange} 
+                  className="w-full border-2 p-3 rounded-xl text-xs font-medium outline-none focus:border-green-500" 
+                />
+              </div>
+              {!formData.isAlive && (
+                <div>
+                  <label className="block text-xs font-bold text-red-500 mb-1">Tanggal Wafat</label>
+                  <input 
+                    type="date" 
+                    name="deathDate" 
+                    value={formData.deathDate || ''} 
+                    onChange={handleChange} 
+                    className="w-full border-2 border-red-200 p-3 rounded-xl text-xs font-medium text-red-600 outline-none focus:border-red-400" 
+                  />
                 </div>
               )}
             </div>
-          )}
-          <div className="flex gap-3 pt-2 sticky bottom-0 bg-white pb-2"><button type="button" onClick={onClose} className="flex-1 py-3.5 border-2 rounded-xl font-bold text-gray-500 cursor-pointer">Batal</button><button type="submit" className="flex-1 py-3.5 bg-green-600 text-white rounded-xl font-bold shadow-md cursor-pointer">Simpan Data</button></div>
-        </form>
+
+            {/* SILSILAH / ORANG TUA */}
+            <div>
+              <label className="block text-xs font-bold text-gray-600 mb-1">Orang Tua (Hubungan Silsilah)</label>
+              <select 
+                name="parentId" 
+                value={formData.parentId ?? ''} 
+                onChange={handleChange} 
+                className="w-full border-2 p-3 rounded-xl bg-white text-sm font-medium outline-none focus:border-green-500"
+              >
+                <option value="">-- Puncak Silsilah / Generasi Pertama (Kosong) --</option>
+                {members.filter(m => m.id !== formData.id).map(m => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} {m.domicile ? `(${m.domicile})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* DOMISILI & NO HP */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">Domisili (Kota)</label>
+                <input 
+                  name="domicile" 
+                  placeholder="Contoh: Yogyakarta"
+                  value={formData.domicile || ''} 
+                  onChange={handleChange} 
+                  className="w-full border-2 p-3 rounded-xl font-medium outline-none focus:border-green-500" 
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">No HP / WhatsApp</label>
+                <input 
+                  name="phone" 
+                  placeholder="08xxxxxxxxxx"
+                  value={formData.phone || ''} 
+                  onChange={handleChange} 
+                  className="w-full border-2 p-3 rounded-xl font-medium outline-none focus:border-green-500" 
+                />
+              </div>
+            </div>
+            
+            {/* ======================================================== */}
+            {/* SEKSI PASANGAN DENGAN FITUR MULTI-PASANGAN & CROP FOTO */}
+            {/* ======================================================== */}
+            <div className="pt-2 border-t border-gray-150">
+              <div className="flex justify-between items-center mb-3">
+                <div>
+                  <h3 className="text-xs font-black text-gray-800 uppercase tracking-wider">
+                    Data Pasangan (Istri / Suami)
+                  </h3>
+                  <p className="text-[10px] text-gray-500">
+                    Bisa tambah lebih dari 1 pasangan, otomatis tampil di pohon silsilah
+                  </p>
+                </div>
+                {spousesList.length > 0 && (
+                  <button 
+                    type="button" 
+                    onClick={handleAddSpouse}
+                    className="text-[11px] font-bold bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 px-2.5 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1 shadow-xs"
+                  >
+                    <Plus size={13} />
+                    <span>Tambah Pasangan</span>
+                  </button>
+                )}
+              </div>
+
+              {spousesList.length === 0 ? (
+                <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl p-4 text-center">
+                  <p className="text-xs text-gray-500 mb-2 font-medium">Anggota ini belum menambahkan data pasangan.</p>
+                  <button 
+                    type="button"
+                    onClick={handleAddSpouse}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition shadow-sm inline-flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Plus size={15} />
+                    <span>+ Tambah Pasangan</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {spousesList.map((spouse, sIdx) => {
+                    const spouseLabel = formData.gender === 'L' ? `Istri ke-${sIdx + 1}` : `Suami ke-${sIdx + 1}`;
+
+                    return (
+                      <div key={spouse.id || sIdx} className="bg-emerald-50/60 border-2 border-emerald-200 rounded-2xl p-4 space-y-3 relative shadow-xs">
+                        
+                        {/* HEADER PASANGAN */}
+                        <div className="flex justify-between items-center pb-2 border-b border-emerald-100">
+                          <span className="font-black text-xs text-emerald-900 bg-emerald-100/90 px-2.5 py-0.5 rounded-full border border-emerald-300">
+                            {spousesList.length > 1 ? spouseLabel : 'Pasangan'}
+                          </span>
+                          <button 
+                            type="button"
+                            onClick={() => handleRemoveSpouse(sIdx)}
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded-lg transition cursor-pointer text-xs font-bold flex items-center gap-1"
+                            title="Hapus data pasangan ini"
+                          >
+                            <Trash2 size={14} />
+                            <span>Hapus</span>
+                          </button>
+                        </div>
+
+                        {/* FOTO PASANGAN DENGAN CROP */}
+                        <div className="flex items-center gap-3 bg-white/80 p-3 rounded-xl border border-emerald-100">
+                          <div className="relative w-14 h-14 rounded-full border-2 border-emerald-300 bg-white flex items-center justify-center overflow-hidden flex-shrink-0 shadow-sm">
+                            {spouse.photo ? (
+                              <img src={spouse.photo} className="w-full h-full object-cover" alt="Spouse" />
+                            ) : (
+                              <Camera size={18} className="text-emerald-500"/>
+                            )}
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              onChange={(e) => handleSpousePhotoFile(e, sIdx)} 
+                              className="absolute inset-0 opacity-0 cursor-pointer" 
+                              title="Pilih dan potong foto pasangan"
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold text-emerald-950 mb-1">Foto Pasangan (Crop Lingkaran)</p>
+                            <div className="flex items-center gap-2">
+                              <label className="text-[11px] font-bold text-emerald-700 bg-emerald-100/70 hover:bg-emerald-100 px-2.5 py-1 rounded-lg transition cursor-pointer inline-block border border-emerald-200">
+                                <span>{spouse.photo ? 'Ganti & Crop' : 'Pilih & Crop'}</span>
+                                <input 
+                                  type="file" 
+                                  accept="image/*" 
+                                  onChange={(e) => handleSpousePhotoFile(e, sIdx)} 
+                                  className="hidden" 
+                                />
+                              </label>
+                              {spouse.photo && (
+                                <button 
+                                  type="button" 
+                                  onClick={() => handleSpouseChange(sIdx, 'photo', '')} 
+                                  className="text-[10px] text-red-500 font-semibold hover:underline cursor-pointer"
+                                >
+                                  Hapus Foto
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* NAMA PASANGAN */}
+                        <div>
+                          <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                            Nama Pasangan *
+                          </label>
+                          <input 
+                            placeholder="Nama lengkap pasangan..." 
+                            value={spouse.name || ''} 
+                            onChange={(e) => handleSpouseChange(sIdx, 'name', e.target.value)} 
+                            required
+                            className="w-full border-2 border-emerald-200 p-2.5 rounded-xl text-sm font-medium bg-white outline-none focus:border-green-500" 
+                          />
+                        </div>
+
+                        {/* STATUS HIDUP & NO HP */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[10px] font-bold text-gray-600 mb-1">Status Kehidupan</label>
+                            <select 
+                              value={spouse.isAlive?.toString() ?? 'true'} 
+                              onChange={(e) => handleSpouseChange(sIdx, 'isAlive', e.target.value === 'true')} 
+                              className="w-full border border-emerald-200 p-2 rounded-xl text-xs bg-white font-medium outline-none focus:border-green-500"
+                            >
+                              <option value="true">Masih Hidup</option>
+                              <option value="false">Meninggal (Alm)</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-gray-600 mb-1">No HP Pasangan</label>
+                            <input 
+                              placeholder="08xxxxxxxxxx" 
+                              value={spouse.phone || ''} 
+                              onChange={(e) => handleSpouseChange(sIdx, 'phone', e.target.value)} 
+                              className="w-full border border-emerald-200 p-2 rounded-xl text-xs bg-white font-medium outline-none focus:border-green-500" 
+                            />
+                          </div>
+                        </div>
+
+                        {/* TANGGAL LAHIR & TANGGAL WAFAT */}
+                        <div className="grid grid-cols-2 gap-3">
+                           <div>
+                             <label className="block text-[10px] font-bold text-gray-600 mb-1">Tanggal Lahir</label>
+                             <input 
+                               type="date" 
+                               value={spouse.birthDate || ''} 
+                               onChange={(e) => handleSpouseChange(sIdx, 'birthDate', e.target.value)} 
+                               className="w-full border border-emerald-200 p-2 rounded-xl text-xs bg-white font-medium outline-none focus:border-green-500" 
+                             />
+                           </div>
+                           {!spouse.isAlive && (
+                             <div>
+                               <label className="block text-[10px] font-bold text-red-500 mb-1">Tanggal Wafat</label>
+                               <input 
+                                 type="date" 
+                                 value={spouse.deathDate || ''} 
+                                 onChange={(e) => handleSpouseChange(sIdx, 'deathDate', e.target.value)} 
+                                 className="w-full border border-red-200 p-2 rounded-xl text-xs bg-white font-medium text-red-600 outline-none focus:border-red-400" 
+                               />
+                             </div>
+                           )}
+                        </div>
+
+                        {/* DOMISILI PASANGAN */}
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-600 mb-1">Domisili Pasangan</label>
+                          <input 
+                            placeholder="Kota domisili pasangan..." 
+                            value={spouse.domicile || ''} 
+                            onChange={(e) => handleSpouseChange(sIdx, 'domicile', e.target.value)} 
+                            className="w-full border border-emerald-200 p-2 rounded-xl text-xs bg-white font-medium outline-none focus:border-green-500" 
+                          />
+                        </div>
+
+                      </div>
+                    );
+                  })}
+
+                  {/* TOMBOL TAMBAH PASANGAN LAINNYA */}
+                  <button 
+                    type="button"
+                    onClick={handleAddSpouse}
+                    className="w-full py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-2 border-dashed border-emerald-300 rounded-xl font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Plus size={16} />
+                    <span>+ Tambah Pasangan Lagi ({formData.gender === 'L' ? 'Istri Lainnya' : 'Suami Lainnya'})</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* TOMBOL AKSI SIMPAN */}
+            <div className="flex gap-3 pt-3 sticky bottom-0 bg-white pb-2 z-10 border-t border-gray-100">
+              <button 
+                type="button" 
+                onClick={onClose} 
+                className="flex-1 py-3.5 border-2 rounded-xl font-bold text-gray-500 cursor-pointer hover:bg-gray-50 transition"
+              >
+                Batal
+              </button>
+              <button 
+                type="submit" 
+                className="flex-1 py-3.5 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-xl font-bold shadow-md cursor-pointer transition active:scale-98"
+              >
+                Simpan Data
+              </button>
+            </div>
+
+          </form>
+        </div>
       </div>
-    </div>
+
+      {/* POPUP CROPPER MODAL */}
+      {cropperModal && (
+        <ImageCropperModal
+          imageSrc={cropperModal.imageSrc}
+          title={cropperModal.title}
+          onCrop={handleApplyCrop}
+          onCancel={() => setCropperModal(null)}
+        />
+      )}
+    </>
   );
 }
 

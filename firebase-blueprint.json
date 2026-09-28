@@ -21,7 +21,8 @@
         "spouseDomicile": { "type": "string", "description": "Domisili pasangan" },
         "spousePhone": { "type": "string", "description": "Nomor telepon pasangan" },
         "spouseBirthDate": { "type": "string", "description": "Tanggal lahir pasangan" },
-        "spouseDeathDate": { "type": "string", "description": "Tanggal wafat pasangan" }
+        "spouseDeathDate": { "type": "string", "description": "Tanggal wafat pasangan" },
+        "spouses": { "type": "array", "description": "Daftar seluruh pasangan (istri/suami) anggota" }
       },
       "required": ["id", "name", "isAlive", "gender"]
     },
