@@ -1000,10 +1000,10 @@ function PohonSilsilahTab({ members }: { members: Member[] }) {
         <div className="bg-white/95 backdrop-blur px-5 py-1.5 rounded-full shadow-lg text-center border border-emerald-100">
           <h2 className="text-xs sm:text-sm font-black text-emerald-900 tracking-wide">Pohon Silsilah Keluarga</h2>
         </div>
-        <div className="bg-emerald-950/85 backdrop-blur px-3.5 py-1 rounded-full shadow-md flex items-center justify-center gap-2 sm:gap-3 text-[9px] font-bold text-white border border-emerald-700/60">
+        <div className="bg-emerald-950/85 backdrop-blur px-3.5 py-1 rounded-full shadow-md flex items-center justify-center gap-2 sm:gap-3 text-[9px] font-bold text-white border border-emerald-700/60 text-center">
           <span className="flex items-center gap-1 text-amber-300">
             <span className="w-3.5 h-[2.5px] bg-amber-400 inline-block rounded-full"></span>
-            <span>Garis Sejajar = Pasangan 💍</span>
+            <span>Garis Sejajar = Pasangan 💍 (1 Pasangan: Kiri-Kanan | &gt;1: Istri 2 di Kiri, Utama di Tengah, Istri 1 di Kanan)</span>
           </span>
           <span className="text-emerald-500">|</span>
           <span className="flex items-center gap-1 text-emerald-200">
@@ -1024,28 +1024,28 @@ function PohonSilsilahTab({ members }: { members: Member[] }) {
       <PanZoomWrapper zoom={zoom} setZoom={setZoom} position={position} setPosition={setPosition}>
          {treeData.map(node => {
             // DETEKSI LOGIKA SPESIAL: Puncak Root (Mbah Sumadi, Istri 1 & Istri 2)
-            // Ketiganya terhubung SEJAJAR horizontal dengan garis pernikahan, dan garis keturunan turun KE BAWAH
+            // Sesuai aturan: Anggota utama di TENGAH, Istri kedua di KIRI, Istri pertama di KANAN
             if (!node.parentId && node.children && node.children.length >= 2) {
-               const wife1 = node.children[0];
-               const wife2 = node.children[1];
+               const wife1 = node.children[0]; // Mbah Aminah (Istri 1)
+               const wife2 = node.children[1]; // Mbah Yanti (Istri 2)
 
                return (
                  <div key={node.id} className="relative flex justify-center items-start">
                     
-                    {/* CABANG ISTRI 1 (KIRI) - Keturunan Istri 1 Turun ke Bawah */}
+                    {/* CABANG ISTRI 2 (KIRI) - Keturunan Istri 2 Turun ke Bawah */}
                     <div className="relative flex flex-col items-center">
                         <TreeNode 
-                          node={wife1} 
+                          node={wife2} 
                           members={members}
                           onOpenProfile={handleProfileClick} 
                           isRoot={true} 
                           globalExpandAll={expandAll} 
                           hideSpouse={true} 
-                          customLabel="Istri 1" 
+                          customLabel="Istri 2" 
                         />
                     </div>
 
-                    {/* GARIS SEJAJAR: ISTRI 1 KE KH. SUMADI */}
+                    {/* GARIS SEJAJAR: ISTRI 2 KE KH. SUMADI */}
                     <div className="self-start mt-8 sm:mt-10 flex items-center justify-center px-1">
                         <div className="w-6 sm:w-12 h-[3.5px] bg-gradient-to-r from-emerald-400 via-amber-400 to-emerald-400 rounded-full"></div>
                         <span className="bg-amber-100 text-amber-900 text-[10px] w-5 h-5 rounded-full border border-amber-300 shadow-sm flex items-center justify-center mx-1">💍</span>
@@ -1064,23 +1064,23 @@ function PohonSilsilahTab({ members }: { members: Member[] }) {
                         />
                     </div>
 
-                    {/* GARIS SEJAJAR: KH. SUMADI KE ISTRI 2 */}
+                    {/* GARIS SEJAJAR: KH. SUMADI KE ISTRI 1 */}
                     <div className="self-start mt-8 sm:mt-10 flex items-center justify-center px-1">
                         <div className="w-6 sm:w-12 h-[3.5px] bg-gradient-to-r from-emerald-400 via-amber-400 to-emerald-400 rounded-full"></div>
                         <span className="bg-amber-100 text-amber-900 text-[10px] w-5 h-5 rounded-full border border-amber-300 shadow-sm flex items-center justify-center mx-1">💍</span>
                         <div className="w-6 sm:w-12 h-[3.5px] bg-gradient-to-r from-amber-400 to-emerald-400 rounded-full"></div>
                     </div>
 
-                    {/* CABANG ISTRI 2 (KANAN) - Keturunan Istri 2 Turun ke Bawah */}
+                    {/* CABANG ISTRI 1 (KANAN) - Keturunan Istri 1 Turun ke Bawah */}
                     <div className="relative flex flex-col items-center">
                         <TreeNode 
-                          node={wife2} 
+                          node={wife1} 
                           members={members}
                           onOpenProfile={handleProfileClick} 
                           isRoot={true} 
                           globalExpandAll={expandAll} 
                           hideSpouse={true} 
-                          customLabel="Istri 2" 
+                          customLabel="Istri 1" 
                         />
                     </div>
                  </div>
@@ -1141,39 +1141,104 @@ function TreeNode({
       {/* UNIT PASANGAN (SEJAJAR HORIZONTAL) */}
       <div className="relative flex items-center justify-center z-10">
         
-        {/* KARTU ANGGOTA UTAMA */}
-        <PersonBox 
-          name={node.name} 
-          gender={node.gender} 
-          isAlive={node.isAlive} 
-          photo={node.photo} 
-          label={customLabel || (isRoot ? 'Puncak Silsilah' : undefined)}
-          onClick={(e) => { e.stopPropagation(); onOpenProfile(node, false); }} 
-        />
+        {hideSpouse || spouses.length === 0 ? (
+          // Tidak ada pasangan: Hanya Anggota Utama
+          <PersonBox 
+            name={node.name} 
+            gender={node.gender} 
+            isAlive={node.isAlive} 
+            photo={node.photo} 
+            label={customLabel || (isRoot ? 'Puncak Silsilah' : undefined)}
+            onClick={(e) => { e.stopPropagation(); onOpenProfile(node, false); }} 
+          />
+        ) : spouses.length === 1 ? (
+          // ATURAN 1: HANYA 1 PASANGAN
+          // Anggota Utama di KIRI, Pasangan di KANAN
+          <>
+            <PersonBox 
+              name={node.name} 
+              gender={node.gender} 
+              isAlive={node.isAlive} 
+              photo={node.photo} 
+              label={customLabel || (isRoot ? 'Puncak Silsilah' : undefined)}
+              onClick={(e) => { e.stopPropagation(); onOpenProfile(node, false); }} 
+            />
 
-        {/* DAFTAR PASANGAN TERHUBUNG SEJAJAR SECARA HORIZONTAL */}
-        {!hideSpouse && spouses.map((sp, sIdx) => {
-          const spouseLabel = spouses.length > 1 
-            ? (node.gender === 'L' ? `Istri ${sIdx + 1}` : `Suami ${sIdx + 1}`) 
-            : 'Pasangan';
+            <MarriageConnector label={node.gender === 'L' ? 'Istri' : 'Suami'} />
 
-          return (
-            <React.Fragment key={sp.id || sIdx}>
-              {/* GARIS SEJAJAR HORIZONTAL ANTARA ANGGOTA DAN PASANGANNYA */}
-              <MarriageConnector label={spouseLabel} />
+            <PersonBox 
+              name={spouses[0].name} 
+              gender={node.gender === 'L' ? 'P' : 'L'} 
+              isAlive={spouses[0].isAlive} 
+              photo={spouses[0].photo} 
+              label={node.gender === 'L' ? 'Istri' : 'Suami'}
+              onClick={(e) => { e.stopPropagation(); onOpenProfile(node, true, spouses[0]); }} 
+            />
+          </>
+        ) : (
+          // ATURAN 2: LEBIH DARI 1 PASANGAN
+          // Anggota Utama di TENGAH, Istri Kedua di KIRI, Istri Pertama di KANAN
+          <>
+            {/* KIRI: Istri Kedua (spouses[1]) */}
+            {spouses[1] && (
+              <>
+                <PersonBox 
+                  name={spouses[1].name} 
+                  gender={node.gender === 'L' ? 'P' : 'L'} 
+                  isAlive={spouses[1].isAlive} 
+                  photo={spouses[1].photo} 
+                  label={node.gender === 'L' ? 'Istri 2' : 'Suami 2'}
+                  onClick={(e) => { e.stopPropagation(); onOpenProfile(node, true, spouses[1]); }} 
+                />
+                <MarriageConnector label={node.gender === 'L' ? 'Istri 2' : 'Suami 2'} />
+              </>
+            )}
 
-              {/* KARTU PASANGAN YANG SEJAJAR */}
-              <PersonBox 
-                name={sp.name} 
-                gender={node.gender === 'L' ? 'P' : 'L'} 
-                isAlive={sp.isAlive} 
-                photo={sp.photo} 
-                label={spouseLabel}
-                onClick={(e) => { e.stopPropagation(); onOpenProfile(node, true, sp); }} 
-              />
-            </React.Fragment>
-          );
-        })}
+            {/* TENGAH: Anggota Utama */}
+            <PersonBox 
+              name={node.name} 
+              gender={node.gender} 
+              isAlive={node.isAlive} 
+              photo={node.photo} 
+              label={customLabel || (isRoot ? 'Puncak Silsilah' : undefined)}
+              onClick={(e) => { e.stopPropagation(); onOpenProfile(node, false); }} 
+            />
+
+            {/* KANAN: Istri Pertama (spouses[0]) */}
+            {spouses[0] && (
+              <>
+                <MarriageConnector label={node.gender === 'L' ? 'Istri 1' : 'Suami 1'} />
+                <PersonBox 
+                  name={spouses[0].name} 
+                  gender={node.gender === 'L' ? 'P' : 'L'} 
+                  isAlive={spouses[0].isAlive} 
+                  photo={spouses[0].photo} 
+                  label={node.gender === 'L' ? 'Istri 1' : 'Suami 1'}
+                  onClick={(e) => { e.stopPropagation(); onOpenProfile(node, true, spouses[0]); }} 
+                />
+              </>
+            )}
+
+            {/* Jika ada istri ke-3, ke-4, dst */}
+            {spouses.slice(2).map((sp, idx) => {
+              const spouseNum = idx + 3;
+              const spouseLabel = node.gender === 'L' ? `Istri ${spouseNum}` : `Suami ${spouseNum}`;
+              return (
+                <React.Fragment key={sp.id || idx}>
+                  <MarriageConnector label={spouseLabel} />
+                  <PersonBox 
+                    name={sp.name} 
+                    gender={node.gender === 'L' ? 'P' : 'L'} 
+                    isAlive={sp.isAlive} 
+                    photo={sp.photo} 
+                    label={spouseLabel}
+                    onClick={(e) => { e.stopPropagation(); onOpenProfile(node, true, sp); }} 
+                  />
+                </React.Fragment>
+              );
+            })}
+          </>
+        )}
 
         {/* Tombol Expand/Collapse Keturunan di bawah pasangan */}
         {hasChildren && (
