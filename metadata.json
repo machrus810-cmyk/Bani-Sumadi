@@ -1,0 +1,6 @@
+{
+  "name": "Keluarga Besar Bani Sumadi",
+  "description": "Aplikasi silsilah keluarga, agenda, kas, dan iuran Keluarga Besar Bani Sumadi by Falah.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

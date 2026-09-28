@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128;
+    }
+
+    // Koleksi Anggota Keluarga
+    match /members/{memberId} {
+      allow read, write: if true;
+    }
+
+    // Koleksi Agenda Keluarga
+    match /agendas/{agendaId} {
+      allow read, write: if true;
+    }
+
+    // Koleksi Transaksi Kas
+    match /transactions/{transactionId} {
+      allow read, write: if true;
+    }
+
+    // Koleksi Foto Slider Dashboard
+    match /sliderImages/{sliderImageId} {
+      allow read, write: if true;
+    }
+
+    // Koleksi Lembar Data Iuran
+    match /iuranSessions/{sessionId} {
+      allow read, write: if true;
+    }
+
+    // Namespace artifacts / public data
+    match /artifacts/{appId}/public/data/{collectionName}/{docId} {
+      allow read, write: if true;
+    }
+
+    // Catch-all
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}

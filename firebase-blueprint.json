@@ -1,0 +1,98 @@
+{
+  "entities": {
+    "Member": {
+      "title": "Member",
+      "description": "Profil anggota silsilah keluarga Bani Sumadi beserta informasi pasangan",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number", "description": "ID numerik unik anggota" },
+        "name": { "type": "string", "description": "Nama lengkap anggota" },
+        "isAlive": { "type": "boolean", "description": "Status hidup anggota" },
+        "gender": { "type": "string", "enum": ["L", "P"], "description": "Jenis kelamin (L/P)" },
+        "parentId": { "type": "number", "description": "ID orang tua dalam silsilah" },
+        "spouse": { "type": "string", "description": "Nama pasangan" },
+        "domicile": { "type": "string", "description": "Domisili atau kota tinggal" },
+        "phone": { "type": "string", "description": "Nomor kontak / WhatsApp" },
+        "birthDate": { "type": "string", "description": "Tanggal lahir (YYYY-MM-DD)" },
+        "deathDate": { "type": "string", "description": "Tanggal wafat (YYYY-MM-DD)" },
+        "photo": { "type": "string", "description": "Foto profil anggota (URL atau Base64)" },
+        "spousePhoto": { "type": "string", "description": "Foto profil pasangan" },
+        "spouseIsAlive": { "type": "boolean", "description": "Status hidup pasangan" },
+        "spouseDomicile": { "type": "string", "description": "Domisili pasangan" },
+        "spousePhone": { "type": "string", "description": "Nomor telepon pasangan" },
+        "spouseBirthDate": { "type": "string", "description": "Tanggal lahir pasangan" },
+        "spouseDeathDate": { "type": "string", "description": "Tanggal wafat pasangan" }
+      },
+      "required": ["id", "name", "isAlive", "gender"]
+    },
+    "Agenda": {
+      "title": "Agenda",
+      "description": "Catatan agenda dan kegiatan keluarga Bani Sumadi",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number", "description": "ID numerik unik agenda" },
+        "date": { "type": "string", "description": "Tanggal kegiatan (YYYY-MM-DD)" },
+        "title": { "type": "string", "description": "Judul acara / kegiatan" },
+        "location": { "type": "string", "description": "Lokasi acara" },
+        "desc": { "type": "string", "description": "Keterangan acara" }
+      },
+      "required": ["id", "date", "title", "location"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Catatan transaksi pemasukan dan pengeluaran kas keluarga",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number", "description": "ID numerik unik transaksi" },
+        "date": { "type": "string", "description": "Tanggal transaksi" },
+        "type": { "type": "string", "enum": ["in", "out"], "description": "Tipe transaksi kas (in / out)" },
+        "amount": { "type": "number", "description": "Nominal transaksi dalam Rupiah" },
+        "desc": { "type": "string", "description": "Keterangan transaksi kas" }
+      },
+      "required": ["id", "date", "type", "amount", "desc"]
+    },
+    "SliderImage": {
+      "title": "SliderImage",
+      "description": "Foto kegiatan keluarga yang ditampilkan di slider dashboard",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number", "description": "ID numerik foto" },
+        "url": { "type": "string", "description": "URL foto atau data base64" }
+      },
+      "required": ["id", "url"]
+    },
+    "IuranSession": {
+      "title": "IuranSession",
+      "description": "Lembar rekapitulasi data iuran anggota keluarga",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number", "description": "ID lembar iuran" },
+        "title": { "type": "string", "description": "Nama/Judul lembar data iuran" },
+        "data": { "type": "array", "description": "Daftar baris pembayaran anggota" }
+      },
+      "required": ["id", "title", "data"]
+    }
+  },
+  "firestore": {
+    "/members/{memberId}": {
+      "schema": "Member",
+      "description": "Koleksi data seluruh anggota keluarga dan keturunan"
+    },
+    "/agendas/{agendaId}": {
+      "schema": "Agenda",
+      "description": "Koleksi agenda pertemuan dan acara keluarga"
+    },
+    "/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Koleksi pencatatan riwayat kas dan keuangan keluarga"
+    },
+    "/sliderImages/{sliderImageId}": {
+      "schema": "SliderImage",
+      "description": "Koleksi foto galeri carousel di dashboard"
+    },
+    "/iuranSessions/{sessionId}": {
+      "schema": "IuranSession",
+      "description": "Koleksi lembar rekap data iuran keluarga"
+    }
+  }
+}
