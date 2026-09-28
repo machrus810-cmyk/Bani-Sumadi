@@ -283,34 +283,36 @@ export default function BaniSumadiApp() {
         )}
 
         {/* HEADER */}
-        <header className="bg-green-700 text-white p-4 sticky top-0 z-20 flex justify-between items-center shadow-md">
-          <div className="flex flex-col">
-             <div className="flex items-center gap-2">
-               <h1 className="text-xl font-black tracking-wide">BANI SUMADI</h1>
+        <header className="bg-green-700 text-white p-3.5 sm:p-4 sticky top-0 z-20 flex justify-between items-center shadow-md">
+          <div className="flex flex-col min-w-0 pr-2">
+             <div className="flex items-center gap-2 flex-wrap">
+               <h1 className="text-base sm:text-lg font-black tracking-wide leading-tight">
+                 Keluarga Besar KH. SUMADI
+               </h1>
                {authRole === 'admin' ? (
-                 <span className="bg-amber-400 text-amber-950 font-black text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1 shadow-sm">
+                 <span className="bg-amber-400 text-amber-950 font-black text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1 shadow-sm shrink-0">
                    <ShieldCheck size={11} /> Admin
                  </span>
                ) : (
-                 <span className="bg-green-800 text-green-200 font-semibold text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider">
-                   Mode Lihat
+                 <span className="bg-green-800/90 text-green-200 font-semibold text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0">
+                   Anggota
                  </span>
                )}
              </div>
-             <span className="text-[9px] font-medium opacity-80 uppercase tracking-widest flex items-center">
-               <UploadCloud size={10} className="mr-1"/> Firebase Cloud Active
+             <span className="text-[10px] font-medium text-green-100 opacity-90 tracking-normal mt-0.5 truncate">
+               Menjalin Silaturrahim, Mempererat Persaudaraan
              </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {authRole === 'admin' ? (
               <button 
                 onClick={() => {
                   setAuthRole('anggota');
                   try { localStorage.removeItem('bs_admin_auth'); } catch {}
-                  showToast('Keluar dari mode Admin (Mode Lihat aktif)', 'success');
+                  showToast('Keluar dari mode Admin (Mode Anggota aktif)', 'success');
                 }} 
-                className="px-3 py-1.5 bg-red-600/90 hover:bg-red-600 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-1.5 cursor-pointer"
+                className="px-2.5 sm:px-3 py-1.5 bg-red-600/90 hover:bg-red-600 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-1.5 cursor-pointer"
                 title="Keluar dari Admin"
               >
                 <LogOut size={14} />
@@ -319,7 +321,7 @@ export default function BaniSumadiApp() {
             ) : (
               <button 
                 onClick={() => setIsAdminLoginOpen(true)} 
-                className="px-3 py-1.5 bg-green-600 hover:bg-green-500 border border-green-500 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-1.5 cursor-pointer"
+                className="px-2.5 sm:px-3 py-1.5 bg-green-600 hover:bg-green-500 border border-green-500 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-1.5 cursor-pointer"
                 title="Masuk sebagai Admin"
               >
                 <Lock size={14} />
@@ -534,8 +536,8 @@ function DashboardTab({
               <img key={img.id} src={img.url} onClick={() => setFullScreenImage(img.url)} className={`absolute inset-0 w-full h-full object-cover cursor-pointer transition-opacity duration-1000 ${idx === currentSlide ? 'opacity-100' : 'opacity-0'}`} alt="Slide" />
             ))}
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-4 text-white pointer-events-none">
-              <h3 className="font-bold text-lg leading-tight">Keluarga Besar Bani Sumadi</h3>
-              <p className="text-xs opacity-90">Menjalin Silaturahmi, Mempererat Persaudaraan</p>
+              <h3 className="font-bold text-lg leading-tight">Keluarga Besar KH. SUMADI</h3>
+              <p className="text-xs opacity-90">Menjalin Silaturrahim, Mempererat Persaudaraan</p>
             </div>
             {sliderImages.length > 1 && (
               <>
@@ -1335,7 +1337,7 @@ function KasTab({ transactions, totalKas, formatRupiah, isAdmin, showToast }: { 
           ))}
           {transactions.length === 0 && <p className="p-8 text-center text-gray-400 text-xs font-medium">Belum ada riwayat keuangan.</p>}
         </div>
-        <div className="py-2.5 text-center bg-gray-50 border-t"><p className="text-[8px] text-gray-400 uppercase font-black tracking-widest">Aplikasi Bani Sumadi &bull; by Falah</p></div>
+        <div className="py-2.5 text-center bg-gray-50 border-t"><p className="text-[8px] text-gray-400 uppercase font-black tracking-widest">Keluarga Besar KH. SUMADI &bull; by Falah</p></div>
       </div>
       {isAdmin && !isDownloading && <button onClick={() => {setEditingItem(null); setIsModalOpen(true);}} className="w-full bg-green-600 text-white font-bold py-3.5 rounded-xl flex items-center justify-center shadow-md hover:bg-green-700 transition mt-4 cursor-pointer"><Plus size={18} className="mr-2"/> Tambah Transaksi</button>}
       
@@ -1523,7 +1525,7 @@ function IuranTab({ iuranSessions, formatRupiah, isAdmin, showToast }: { iuranSe
                </tfoot>
              </table>
            </div>
-           <div className="py-2.5 text-center bg-gray-50 border-t"><p className="text-[8px] text-gray-400 uppercase font-black tracking-widest">Aplikasi Bani Sumadi &bull; by Falah</p></div>
+           <div className="py-2.5 text-center bg-gray-50 border-t"><p className="text-[8px] text-gray-400 uppercase font-black tracking-widest">Keluarga Besar KH. SUMADI &bull; by Falah</p></div>
          </div>
       )}
       
