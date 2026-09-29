@@ -176,23 +176,26 @@ export const getMemberParentName = (member: Member, allMembers: Member[]): strin
 
   if (munasikah && member.id === munasikah.id) return '-';
   if (masripah && member.id === masripah.id) return '-';
+  if (member.id === 2 || member.id === 3) return '-';
 
-  // Keturunan Mbah Munasikah (Istri 1 / Istri Pertama)
-  const isMunasikahChild = 
-    (munasikah && (member.parentId === munasikah.id || member.motherId === munasikah.id)) ||
+  // Keturunan Langsung Mbah KH Sumadi & Mbah Munasikah (Istri 1 / Istri Pertama)
+  const isDirectMunasikahChild = 
+    (munasikah && member.parentId === munasikah.id) ||
+    member.parentId === 2 ||
     (member.parentId === 1 && (member.branch === 'istri1' || (munasikah && member.motherId === munasikah.id))) ||
-    (member.branch === 'istri1' && (!member.parentId || member.parentId === 1 || member.parentId === munasikah?.id));
+    (!member.parentId && member.branch === 'istri1');
 
-  // Keturunan Mbah Masripah (Istri 2 / Istri Kedua)
-  const isMasripahChild = 
-    (masripah && (member.parentId === masripah.id || member.motherId === masripah.id)) ||
+  // Keturunan Langsung Mbah KH Sumadi & Mbah Masripah (Istri 2 / Istri Kedua)
+  const isDirectMasripahChild = 
+    (masripah && member.parentId === masripah.id) ||
+    member.parentId === 3 ||
     (member.parentId === 1 && (member.branch === 'istri2' || (masripah && member.motherId === masripah.id))) ||
-    (member.branch === 'istri2' && (!member.parentId || member.parentId === 1 || member.parentId === masripah?.id));
+    (!member.parentId && member.branch === 'istri2');
 
-  if (isMunasikahChild) {
+  if (isDirectMunasikahChild) {
     return `Mbah KH. Sumadi & ${munasikah ? munasikah.name : 'Mbah Munasikah (Istri 1)'}`;
   }
-  if (isMasripahChild) {
+  if (isDirectMasripahChild) {
     return `Mbah KH. Sumadi & ${masripah ? masripah.name : 'Mbah Masripah (Istri 2)'}`;
   }
 
@@ -261,7 +264,12 @@ export interface IuranSession {
 const rawInitialMembers: Member[] = [
   { id: 1, name: "Mbah KH. Sumadi", isAlive: false, gender: "L", parentId: null, spouse: "", domicile: "Pondok Pesantren", phone: "-", birthDate: "1935-01-01", deathDate: "2005-05-10", photo: "", spousePhoto: "", spouseIsAlive: false, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "" },
   { id: 2, name: "Mbah Munasikah (Istri 1)", isAlive: false, gender: "P", parentId: null, relationType: 'spouse', spouseOfId: 1, spouse: "", domicile: "Pondok Pesantren", phone: "-", birthDate: "1938-03-12", deathDate: "2010-08-20", photo: "", spousePhoto: "", spouseIsAlive: false, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "", branch: "istri1" },
-  { id: 3, name: "Mbah Masripah (Istri 2)", isAlive: false, gender: "P", parentId: null, relationType: 'spouse', spouseOfId: 1, spouse: "", domicile: "Pondok Pesantren", phone: "-", birthDate: "1942-07-22", deathDate: "2015-11-05", photo: "", spousePhoto: "", spouseIsAlive: false, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "", branch: "istri2" }
+  { id: 3, name: "Mbah Masripah (Istri 2)", isAlive: false, gender: "P", parentId: null, relationType: 'spouse', spouseOfId: 1, spouse: "", domicile: "Pondok Pesantren", phone: "-", birthDate: "1942-07-22", deathDate: "2015-11-05", photo: "", spousePhoto: "", spouseIsAlive: false, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "", branch: "istri2" },
+  { id: 4, name: "Musyarrifin", isAlive: true, gender: "L", parentId: 2, motherId: 2, branch: "istri1", relationType: 'child', spouse: "", domicile: "Jawa Timur", phone: "-", birthDate: "1960-01-01", deathDate: null, photo: "", spousePhoto: "", spouseIsAlive: true, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "" },
+  { id: 5, name: "Masluri", isAlive: true, gender: "L", parentId: 3, motherId: 3, branch: "istri2", relationType: 'child', spouse: "", domicile: "Jawa Timur", phone: "-", birthDate: "1965-02-15", deathDate: null, photo: "", spousePhoto: "", spouseIsAlive: true, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "" },
+  { id: 6, name: "Masiroh", isAlive: true, gender: "P", parentId: 3, motherId: 3, branch: "istri2", relationType: 'child', spouse: "", domicile: "Jawa Timur", phone: "-", birthDate: "1968-05-20", deathDate: null, photo: "", spousePhoto: "", spouseIsAlive: true, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "" },
+  { id: 7, name: "Masruron", isAlive: true, gender: "L", parentId: 3, motherId: 3, branch: "istri2", relationType: 'child', spouse: "", domicile: "Jawa Timur", phone: "-", birthDate: "1972-08-10", deathDate: null, photo: "", spousePhoto: "", spouseIsAlive: true, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "" },
+  { id: 8, name: "Masfir", isAlive: true, gender: "L", parentId: 3, motherId: 3, branch: "istri2", relationType: 'child', spouse: "", domicile: "Jawa Timur", phone: "-", birthDate: "1975-11-25", deathDate: null, photo: "", spousePhoto: "", spouseIsAlive: true, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "" }
 ];
 
 const initialMembers: Member[] = rawInitialMembers.map((m, idx) => ({ ...m, order: idx }));
@@ -420,6 +428,13 @@ export default function BaniSumadiApp() {
           if (snap.empty) {
             for (const item of data) {
               await setDoc(getDocRef(name, item.id), item);
+            }
+          } else if (name === 'members') {
+            const existingIds = new Set(snap.docs.map(d => Number(d.id)));
+            for (const item of data) {
+              if (!existingIds.has(item.id)) {
+                await setDoc(getDocRef(name, item.id), item);
+              }
             }
           }
         } catch (err) {
@@ -1599,10 +1614,10 @@ function buildFullProfileData(
   const sumadi = allMembers.find(m => m.id === 1) || allMembers[0];
   const wife1 = allMembers.find(m => m.name.toLowerCase().includes('munasikah')) || 
                 allMembers.find(m => m.branch === 'istri1' && m.spouseOfId === 1) ||
-                allMembers.find(m => m.id === 3);
+                allMembers.find(m => m.id === 2);
   const wife2 = allMembers.find(m => m.name.toLowerCase().includes('masripah')) || 
                 allMembers.find(m => m.branch === 'istri2' && m.spouseOfId === 1) ||
-                allMembers.find(m => m.id === 2);
+                allMembers.find(m => m.id === 3);
 
   if (!isSpouse) {
     const isMale = member.gender === 'L';
@@ -1643,104 +1658,169 @@ function buildFullProfileData(
     // Relations
     const relations: FamilyRelationItem[] = [];
 
-    // 1. Ayah
-    if (member.id !== 1 && member.id !== wife1?.id && member.id !== wife2?.id) {
-      if (member.parentId === 1 || (wife1 && member.parentId === wife1.id) || (wife2 && member.parentId === wife2.id) || member.branch === 'istri1' || member.branch === 'istri2') {
+    // Deteksi Ayah & Ibu
+    const isRootAncestor = member.id === 1 || (wife1 && member.id === wife1.id) || (wife2 && member.id === wife2.id) || member.id === 2 || member.id === 3;
+    
+    if (!isRootAncestor) {
+      let ayahItem: FamilyRelationItem | null = null;
+      let ibuItem: FamilyRelationItem | null = null;
+
+      // Apakah anggota ini adalah anak langsung Mbah KH. Sumadi (Generasi 1)?
+      // Contoh: Musyarrifin, Masluri, Masiroh, Masruron, Masfir
+      const isDirectChildOfSumadi = 
+        member.parentId === 1 || 
+        (wife1 && member.parentId === wife1.id) || 
+        (wife2 && member.parentId === wife2.id) || 
+        member.parentId === 2 || 
+        member.parentId === 3 || 
+        (!member.parentId && (member.branch === 'istri1' || member.branch === 'istri2'));
+
+      if (isDirectChildOfSumadi) {
+        // 1. Ayah Kandung: Mbah KH. Sumadi
         if (sumadi) {
-          relations.push({
+          ayahItem = {
             relation: 'Ayah',
             name: sumadi.name,
             photo: sumadi.photo,
             gender: 'L',
             isAlive: sumadi.isAlive,
             targetPerson: { member: sumadi, isSpouse: false }
-          });
+          };
         }
-      } else if (member.parentId) {
-        const parent = allMembers.find(m => m.id === member.parentId);
-        if (parent) {
-          if (parent.gender === 'L') {
-            relations.push({
-              relation: 'Ayah',
-              name: parent.name,
-              photo: parent.photo,
-              gender: 'L',
-              isAlive: parent.isAlive,
-              targetPerson: { member: parent, isSpouse: false }
-            });
-          }
-        }
-      }
-    }
 
-    // 2. Ibu
-    if (member.id !== 1 && member.id !== wife1?.id && member.id !== wife2?.id) {
-      const isMunasikahDesc = (wife1 && member.parentId === wife1.id) || (member.parentId === 1 && ((wife1 && member.motherId === wife1.id) || member.branch === 'istri1')) || (member.branch === 'istri1' && (!member.parentId || member.parentId === 1 || member.parentId === wife1?.id));
-      const isMasripahDesc = (wife2 && member.parentId === wife2.id) || (member.parentId === 1 && ((wife2 && member.motherId === wife2.id) || member.branch === 'istri2')) || (member.branch === 'istri2' && (!member.parentId || member.parentId === 1 || member.parentId === wife2?.id));
+        // 2. Ibu Kandung: Mbah Munasikah (Istri 1) atau Mbah Masripah (Istri 2)
+        const isFromWife1 = 
+          (wife1 && member.parentId === wife1.id) || 
+          member.parentId === 2 || 
+          (member.parentId === 1 && ((wife1 && member.motherId === wife1.id) || member.branch === 'istri1')) ||
+          (member.branch === 'istri1' && (!member.parentId || member.parentId === 1));
 
-      if (isMunasikahDesc) {
-        if (wife1) {
-          relations.push({
+        const isFromWife2 = 
+          (wife2 && member.parentId === wife2.id) || 
+          member.parentId === 3 || 
+          (member.parentId === 1 && ((wife2 && member.motherId === wife2.id) || member.branch === 'istri2')) ||
+          (member.branch === 'istri2' && (!member.parentId || member.parentId === 1));
+
+        if (isFromWife1 && wife1) {
+          ibuItem = {
             relation: 'Ibu',
             name: wife1.name,
             photo: wife1.photo,
             gender: 'P',
             isAlive: wife1.isAlive,
             targetPerson: { member: wife1, isSpouse: false }
-          });
-        }
-      } else if (isMasripahDesc) {
-        if (wife2) {
-          relations.push({
+          };
+        } else if (isFromWife2 && wife2) {
+          ibuItem = {
             relation: 'Ibu',
             name: wife2.name,
             photo: wife2.photo,
             gender: 'P',
             isAlive: wife2.isAlive,
             targetPerson: { member: wife2, isSpouse: false }
-          });
+          };
         }
       } else if (member.parentId) {
+        // Keturunan Lanjutan (Cucu, Cicit, dst. dari Musyarrifin, Masluri, Masiroh, Masruron, Masfir, dll.)
         const parent = allMembers.find(m => m.id === member.parentId);
         if (parent) {
-          if (parent.gender === 'P') {
-            relations.push({
+          if (parent.gender === 'L') {
+            // Orang tua tercatat adalah AYAH Laki-laki (contoh: Musyarrifin, Masluri, Masruron, Masfir)
+            ayahItem = {
+              relation: 'Ayah',
+              name: parent.name,
+              photo: parent.photo,
+              gender: 'L',
+              isAlive: parent.isAlive,
+              targetPerson: { member: parent, isSpouse: false }
+            };
+
+            // Cari IBU (Istri dari Ayah)
+            let motherMember: Member | undefined = undefined;
+            if (member.motherId && member.motherId !== 1 && member.motherId !== 2 && member.motherId !== 3 && member.motherId !== wife1?.id && member.motherId !== wife2?.id) {
+              motherMember = allMembers.find(m => m.id === member.motherId && m.gender === 'P');
+            }
+
+            if (motherMember) {
+              ibuItem = {
+                relation: 'Ibu',
+                name: motherMember.name,
+                photo: motherMember.photo,
+                gender: 'P',
+                isAlive: motherMember.isAlive,
+                targetPerson: { member: motherMember, isSpouse: false }
+              };
+            } else {
+              const pSpouses = getMemberSpouses(parent, allMembers);
+              let motherSpouse: Spouse | undefined = undefined;
+              if (member.parentSpouseName) {
+                motherSpouse = pSpouses.find(s => s.name.trim().toLowerCase() === member.parentSpouseName?.trim().toLowerCase());
+              }
+              if (!motherSpouse && member.spouseIndex !== undefined && member.spouseIndex !== null && pSpouses[member.spouseIndex]) {
+                motherSpouse = pSpouses[member.spouseIndex];
+              }
+              if (!motherSpouse && pSpouses.length > 0) {
+                motherSpouse = pSpouses[0];
+              }
+
+              if (motherSpouse) {
+                const spMember = allMembers.find(m => m.id === motherSpouse?.id || (m.name.trim().toLowerCase() === motherSpouse?.name.trim().toLowerCase() && m.id !== parent.id));
+                ibuItem = {
+                  relation: 'Ibu',
+                  name: motherSpouse.name,
+                  photo: motherSpouse.photo,
+                  gender: 'P',
+                  isAlive: motherSpouse.isAlive ?? true,
+                  targetPerson: spMember 
+                    ? { member: spMember, isSpouse: false }
+                    : { member: parent, isSpouse: true, spouseObj: motherSpouse }
+                };
+              }
+            }
+          } else {
+            // Orang tua tercatat adalah IBU Perempuan (contoh: Masiroh)
+            ibuItem = {
               relation: 'Ibu',
               name: parent.name,
               photo: parent.photo,
               gender: 'P',
               isAlive: parent.isAlive,
               targetPerson: { member: parent, isSpouse: false }
-            });
-          } else {
+            };
+
+            // Cari AYAH (Suami dari Ibu)
             const pSpouses = getMemberSpouses(parent, allMembers);
-            let motherSpouse: Spouse | undefined = undefined;
+            let fatherSpouse: Spouse | undefined = undefined;
             if (member.parentSpouseName) {
-              motherSpouse = pSpouses.find(s => s.name.trim().toLowerCase() === member.parentSpouseName?.trim().toLowerCase());
+              fatherSpouse = pSpouses.find(s => s.name.trim().toLowerCase() === member.parentSpouseName?.trim().toLowerCase());
             }
-            if (!motherSpouse && member.spouseIndex !== undefined && pSpouses[member.spouseIndex]) {
-              motherSpouse = pSpouses[member.spouseIndex];
+            if (!fatherSpouse && member.spouseIndex !== undefined && member.spouseIndex !== null && pSpouses[member.spouseIndex]) {
+              fatherSpouse = pSpouses[member.spouseIndex];
             }
-            if (!motherSpouse && pSpouses.length > 0) {
-              motherSpouse = pSpouses[0];
+            if (!fatherSpouse && pSpouses.length > 0) {
+              fatherSpouse = pSpouses[0];
             }
 
-            if (motherSpouse) {
-              const motherMember = allMembers.find(m => m.id === motherSpouse?.id || m.name === motherSpouse?.name);
-              relations.push({
-                relation: 'Ibu',
-                name: motherSpouse.name,
-                photo: motherSpouse.photo,
-                gender: 'P',
-                isAlive: motherSpouse.isAlive ?? true,
-                targetPerson: motherMember 
-                  ? { member: motherMember, isSpouse: false }
-                  : { member: parent, isSpouse: true, spouseObj: motherSpouse }
-              });
+            if (fatherSpouse) {
+              const spMember = allMembers.find(m => m.id === fatherSpouse?.id || (m.name.trim().toLowerCase() === fatherSpouse?.name.trim().toLowerCase() && m.id !== parent.id));
+              ayahItem = {
+                relation: 'Ayah',
+                name: fatherSpouse.name,
+                photo: fatherSpouse.photo,
+                gender: 'L',
+                isAlive: fatherSpouse.isAlive ?? true,
+                targetPerson: spMember 
+                  ? { member: spMember, isSpouse: false }
+                  : { member: parent, isSpouse: true, spouseObj: fatherSpouse }
+              };
             }
           }
         }
       }
+
+      // Masukkan Ayah dan Ibu sesuai urutan standar
+      if (ayahItem) relations.push(ayahItem);
+      if (ibuItem) relations.push(ibuItem);
     }
 
     // 3. Pasangan (Istri / Suami)
@@ -2003,14 +2083,14 @@ function PohonSilsilahTab({
   const wife1 = useMemo(() => {
     return members.find(m => m.name.toLowerCase().includes('munasikah')) || 
            members.find(m => m.spouseOfId === 1 && (m.branch === 'istri1' || m.order === 1)) ||
-           members.find(m => m.id === 3);
+           members.find(m => m.id === 2);
   }, [members]);
 
   // Mbah Masripah adalah ISTRI KEDUA (Istri 2)
   const wife2 = useMemo(() => {
     return members.find(m => m.name.toLowerCase().includes('masripah')) || 
            members.find(m => m.spouseOfId === 1 && (m.branch === 'istri2' || m.order === 2)) ||
-           members.find(m => m.id === 2);
+           members.find(m => m.id === 3);
   }, [members]);
 
   // 3. Sub-tree Builder untuk Keturunan Masing-Masing Istri
@@ -2066,11 +2146,11 @@ function PohonSilsilahTab({
   const getParentLabel = (node: Member, isSpouse: boolean): string => {
     if (isSpouse) return '-';
     if (node.id === 1) return 'Pemuncak Silsilah (Akar Utama)';
-    if (node.id === (wife1?.id ?? 3) || node.id === (wife2?.id ?? 2)) return '-';
-    if ((wife1 && node.parentId === wife1.id) || (node.parentId === 1 && (node.motherId === wife1?.id || node.branch === 'istri1'))) {
+    if (node.id === (wife1?.id ?? 2) || node.id === (wife2?.id ?? 3)) return '-';
+    if ((wife1 && node.parentId === wife1.id) || node.parentId === 2 || (node.parentId === 1 && (node.motherId === wife1?.id || node.branch === 'istri1'))) {
       return `Mbah KH. Sumadi & ${wife1 ? wife1.name : 'Mbah Munasikah (Istri 1)'}`;
     }
-    if ((wife2 && node.parentId === wife2.id) || (node.parentId === 1 && (node.motherId === wife2?.id || node.branch === 'istri2'))) {
+    if ((wife2 && node.parentId === wife2.id) || node.parentId === 3 || (node.parentId === 1 && (node.motherId === wife2?.id || node.branch === 'istri2'))) {
       return `Mbah KH. Sumadi & ${wife2 ? wife2.name : 'Mbah Masripah (Istri 2)'}`;
     }
     const parent = members.find(m => m.id === node.parentId);
@@ -3244,15 +3324,15 @@ function ModalFormAnggota({
   const munasikah = useMemo(() => members.find(m => m.name.toLowerCase().includes('munasikah')), [members]);
   const masripah = useMemo(() => members.find(m => m.name.toLowerCase().includes('masripah')), [members]);
 
-  const munasikahId = munasikah ? munasikah.id : 3;
-  const masripahId = masripah ? masripah.id : 2;
+  const munasikahId = munasikah ? munasikah.id : 2;
+  const masripahId = masripah ? masripah.id : 3;
 
   // Pemilihan Orang Tua: default Mbah KH. Sumadi & Mbah Munasikah (Istri 1) untuk anggota baru
   const [selectedParentChoice, setSelectedParentChoice] = useState<string>(() => {
     if (member) {
       if (member.id === 1 || (munasikah && member.id === munasikah.id) || (masripah && member.id === masripah.id) || member.id === 2 || member.id === 3) return '';
-      if (member.parentId === munasikahId || member.motherId === munasikahId) return String(munasikahId);
-      if (member.parentId === masripahId || member.motherId === masripahId) return String(masripahId);
+      if (member.parentId === munasikahId || member.parentId === 2) return String(munasikahId);
+      if (member.parentId === masripahId || member.parentId === 3) return String(masripahId);
       if (member.parentId === 1) {
         return (member.motherId === masripahId || member.branch === 'istri2') ? String(masripahId) : String(munasikahId);
       }
@@ -3276,7 +3356,7 @@ function ModalFormAnggota({
           return `${member.parentId}`;
         }
       }
-      if (member.motherId === masripahId || member.branch === 'istri2') return String(masripahId);
+      if (member.branch === 'istri2') return String(masripahId);
       return String(munasikahId);
     }
     return String(munasikahId);
@@ -3344,13 +3424,13 @@ function ModalFormAnggota({
 
   const selectedParentInfo = useMemo(() => {
     if (!selectedParentChoice) return null;
-    if (selectedParentChoice === String(munasikahId) || selectedParentChoice === '3' || selectedParentChoice === 'munasikah') {
+    if (selectedParentChoice === String(munasikahId) || selectedParentChoice === '2' || selectedParentChoice === 'munasikah') {
       return {
         label: `Mbah KH. Sumadi & ${munasikah ? munasikah.name : 'Mbah Munasikah'} (Istri 1)`,
         branch: 'istri1' as const
       };
     }
-    if (selectedParentChoice === String(masripahId) || selectedParentChoice === '2' || selectedParentChoice === 'masripah') {
+    if (selectedParentChoice === String(masripahId) || selectedParentChoice === '3' || selectedParentChoice === 'masripah') {
       return {
         label: `Mbah KH. Sumadi & ${masripah ? masripah.name : 'Mbah Masripah'} (Istri 2)`,
         branch: 'istri2' as const
@@ -3523,13 +3603,13 @@ function ModalFormAnggota({
         relationType = 'child';
         spouseOfId = null;
 
-        if (selectedParentChoice === String(munasikahId) || selectedParentChoice === '3' || selectedParentChoice === 'munasikah') {
+        if (selectedParentChoice === String(munasikahId) || selectedParentChoice === '2' || selectedParentChoice === 'munasikah') {
           parentId = munasikahId;
           motherId = munasikahId;
           memberBranch = 'istri1';
           parentSpouseName = munasikah ? munasikah.name : 'Mbah Munasikah';
           spouseIndex = 0;
-        } else if (selectedParentChoice === String(masripahId) || selectedParentChoice === '2' || selectedParentChoice === 'masripah') {
+        } else if (selectedParentChoice === String(masripahId) || selectedParentChoice === '3' || selectedParentChoice === 'masripah') {
           parentId = masripahId;
           motherId = masripahId;
           memberBranch = 'istri2';
@@ -3548,9 +3628,9 @@ function ModalFormAnggota({
               const sps = getMemberSpouses(parentObj, members);
               if (sps[sIdx]) {
                 parentSpouseName = sps[sIdx].name;
-                motherId = (parentObj.gender === 'P' ? parentObj.id : (sps[sIdx].id ? Number(sps[sIdx].id) : null));
+                motherId = (parentObj.gender === 'P' ? parentObj.id : (sps[sIdx].id && !isNaN(Number(sps[sIdx].id)) ? Number(sps[sIdx].id) : null));
               } else {
-                motherId = parentObj.motherId || (memberBranch === 'istri2' ? masripahId : munasikahId);
+                motherId = (parentObj.gender === 'P' ? parentObj.id : null);
               }
             }
           } else {
@@ -3559,7 +3639,7 @@ function ModalFormAnggota({
             const parentObj = members.find(m => m.id === pId);
             if (parentObj) {
               memberBranch = getMemberBranch(parentObj, members);
-              motherId = parentObj.motherId || (memberBranch === 'istri2' ? masripahId : munasikahId);
+              motherId = (parentObj.gender === 'P' ? parentObj.id : null);
             }
           }
         } else {
@@ -3736,7 +3816,7 @@ function ModalFormAnggota({
                   <p className="text-[11px] text-emerald-800 font-medium leading-relaxed">
                     {member?.id === 1 
                       ? 'Mbah KH. Sumadi adalah pemuncak silsilah utama (posisi tengah sejajar).' 
-                      : (member?.name?.toLowerCase().includes('munasikah') || (munasikah && member?.id === munasikah.id) || member?.id === 3) 
+                      : (member?.name?.toLowerCase().includes('munasikah') || (munasikah && member?.id === munasikah.id) || member?.id === 2) 
                       ? 'Mbah Munasikah adalah pemuncak silsilah (Istri Pertama, posisi kiri sejajar).' 
                       : 'Mbah Masripah adalah pemuncak silsilah (Istri Kedua, posisi kanan sejajar).'}
                   </p>
