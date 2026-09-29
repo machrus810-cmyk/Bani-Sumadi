@@ -4,7 +4,7 @@ import {
   LogOut, Plus, Edit2, Trash2, Search, ChevronLeft, 
   ChevronRight, Camera, Image as ImageIcon, UploadCloud, X, Download, FolderPlus,
   Minus, Maximize, FileText, CheckCircle, Lock, ShieldCheck,
-  ArrowUp, ArrowDown, GripVertical
+  ArrowUp, ArrowDown, GripVertical, MapPin, Infinity as InfinityIcon, Phone
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -495,8 +495,8 @@ export default function BaniSumadiApp() {
         <main className="flex-1 overflow-y-auto relative bg-gray-50">
           <div className="p-4 h-full">
              {activeTab === 'dash' && <DashboardTab members={members} totalKas={totalKas} nextAgenda={nextAgenda} formatRupiah={formatRupiah} sliderImages={sliderImages} isAdmin={authRole === 'admin'} showToast={showToast} onNavigateTab={setActiveTab} />}
-             {activeTab === 'pohon' && <PohonSilsilahTab members={members} showToast={showToast} />}
-             {activeTab === 'anggota' && <AnggotaTab members={members} isAdmin={authRole === 'admin'} showToast={showToast} />}
+             {activeTab === 'pohon' && <PohonSilsilahTab members={members} showToast={showToast} onNavigateTab={setActiveTab} />}
+             {activeTab === 'anggota' && <AnggotaTab members={members} isAdmin={authRole === 'admin'} showToast={showToast} onNavigateTab={setActiveTab} />}
              {activeTab === 'agenda' && <AgendaTab agendas={agendas} isAdmin={authRole === 'admin'} showToast={showToast} />}
              {activeTab === 'kas' && <KasTab transactions={transactions} totalKas={totalKas} formatRupiah={formatRupiah} isAdmin={authRole === 'admin'} showToast={showToast} />}
              {activeTab === 'iuran' && <IuranTab iuranSessions={iuranSessions} formatRupiah={formatRupiah} isAdmin={authRole === 'admin'} showToast={showToast} />}
@@ -1414,17 +1414,339 @@ interface TreeNodeData extends Member {
   children: TreeNodeData[];
 }
 
-interface ProfileData {
+export interface FamilyRelationTarget {
+  member: Member;
+  isSpouse?: boolean;
+  spouseObj?: Spouse;
+}
+
+export interface FamilyRelationItem {
+  relation: string;
   name: string;
-  isAlive: boolean;
+  photo?: string;
   gender: 'L' | 'P';
-  photo: string;
-  birthDate: string;
-  deathDate: string | null;
-  domicile: string;
-  phone: string;
-  spouse: string;
-  parentName: string;
+  isAlive: boolean;
+  targetPerson: FamilyRelationTarget;
+}
+
+export interface ProfileDetailData {
+  name: string;
+  gender: 'L' | 'P';
+  isAlive: boolean;
+  photo?: string;
+  birthDate?: string;
+  deathDate?: string | null;
+  domicile?: string;
+  phone?: string;
+  subtitle: string;
+  maritalStatus: string;
+  childrenCount: number;
+  relations: FamilyRelationItem[];
+  rawMember: Member;
+  isSpouse: boolean;
+  spouseObj?: Spouse;
+}
+
+function formatIndonesianDate(dateStr?: string | null): string {
+  if (!dateStr || dateStr === '-') return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function calculateAge(birthDateStr?: string | null, deathDateStr?: string | null, isAlive: boolean = true): number | null {
+  if (!birthDateStr || birthDateStr === '-') return null;
+  const birth = new Date(birthDateStr);
+  if (isNaN(birth.getTime())) return null;
+  const end = (!isAlive && deathDateStr && !isNaN(new Date(deathDateStr).getTime())) ? new Date(deathDateStr) : new Date();
+  let age = end.getFullYear() - birth.getFullYear();
+  const m = end.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && end.getDate() < birth.getDate())) {
+    age--;
+  }
+  return age >= 0 ? age : null;
+}
+
+function formatBirthDateAndAge(birthDate?: string | null, isAlive: boolean = true, deathDate?: string | null): string {
+  if (!birthDate && !deathDate) return '-';
+  const birthFormatted = formatIndonesianDate(birthDate);
+  const deathFormatted = formatIndonesianDate(deathDate);
+  const age = calculateAge(birthDate, deathDate, isAlive);
+
+  if (isAlive) {
+    if (birthFormatted && age !== null) {
+      return `${birthFormatted} (${age} tahun)`;
+    }
+    if (birthFormatted) return birthFormatted;
+    return '-';
+  } else {
+    if (birthFormatted && deathFormatted) {
+      return `${birthFormatted} - ${deathFormatted} (Wafat)`;
+    }
+    if (birthFormatted && age !== null) {
+      return `${birthFormatted} (${age} tahun, Wafat)`;
+    }
+    if (birthFormatted) return `${birthFormatted} (Wafat)`;
+    if (deathFormatted) return `Wafat: ${deathFormatted}`;
+    return 'Wafat (ALM)';
+  }
+}
+
+function buildFullProfileData(
+  member: Member, 
+  allMembers: Member[], 
+  isSpouse: boolean = false, 
+  spouseObj?: Spouse
+): ProfileDetailData {
+  const sumadi = allMembers.find(m => m.id === 1) || allMembers[0];
+  const wife1 = allMembers.find(m => m.id === 2);
+  const wife2 = allMembers.find(m => m.id === 3);
+
+  if (!isSpouse) {
+    const isMale = member.gender === 'L';
+    const spouses = getMemberSpouses(member, allMembers);
+    
+    // Subtitle / Garis Keturunan
+    let subtitle = 'Anggota Keluarga';
+    if (member.id === 1) {
+      subtitle = 'Pemuncak Silsilah (Akar Utama)';
+    } else if (member.id === 2) {
+      subtitle = 'Istri Pertama Mbah KH. Sumadi';
+    } else if (member.id === 3) {
+      subtitle = 'Istri Kedua Mbah KH. Sumadi';
+    } else if (member.parentId) {
+      const pName = getMemberParentName(member, allMembers);
+      if (pName && pName !== '-') {
+        subtitle = `Anak dari ${pName}`;
+      }
+    }
+
+    // Children
+    let children: Member[] = [];
+    if (member.id === 1) {
+      children = allMembers.filter(m => (m.parentId === 1 || m.parentId === 2 || m.parentId === 3) && m.relationType !== 'spouse' && m.id !== 1 && m.id !== 2 && m.id !== 3);
+    } else if (member.id === 2) {
+      children = allMembers.filter(m => (m.parentId === 2 || (m.parentId === 1 && (m.motherId === 2 || m.branch === 'istri1'))) && m.relationType !== 'spouse' && m.id !== 1 && m.id !== 2 && m.id !== 3);
+    } else if (member.id === 3) {
+      children = allMembers.filter(m => (m.parentId === 3 || (m.parentId === 1 && (m.motherId === 3 || m.branch === 'istri2'))) && m.relationType !== 'spouse' && m.id !== 1 && m.id !== 2 && m.id !== 3);
+    } else {
+      children = allMembers.filter(m => (m.parentId === member.id || m.motherId === member.id) && m.relationType !== 'spouse' && m.id !== 1 && m.id !== 2 && m.id !== 3);
+    }
+
+    // Marital status
+    const maritalStatus = spouses.length > 0 
+      ? (member.isAlive ? 'Menikah' : 'Wafat') 
+      : (member.relationType === 'spouse' ? 'Menikah' : 'Belum Menikah');
+
+    // Relations
+    const relations: FamilyRelationItem[] = [];
+
+    // 1. Ayah
+    if (member.id !== 1 && member.id !== 2 && member.id !== 3) {
+      if (member.parentId === 1 || member.parentId === 2 || member.parentId === 3) {
+        if (sumadi) {
+          relations.push({
+            relation: 'Ayah',
+            name: sumadi.name,
+            photo: sumadi.photo,
+            gender: 'L',
+            isAlive: sumadi.isAlive,
+            targetPerson: { member: sumadi, isSpouse: false }
+          });
+        }
+      } else if (member.parentId) {
+        const parent = allMembers.find(m => m.id === member.parentId);
+        if (parent) {
+          if (parent.gender === 'L') {
+            relations.push({
+              relation: 'Ayah',
+              name: parent.name,
+              photo: parent.photo,
+              gender: 'L',
+              isAlive: parent.isAlive,
+              targetPerson: { member: parent, isSpouse: false }
+            });
+          }
+        }
+      }
+    }
+
+    // 2. Ibu
+    if (member.id !== 1 && member.id !== 2 && member.id !== 3) {
+      if (member.parentId === 2 || (member.parentId === 1 && (member.motherId === 2 || member.branch === 'istri1'))) {
+        if (wife1) {
+          relations.push({
+            relation: 'Ibu',
+            name: wife1.name,
+            photo: wife1.photo,
+            gender: 'P',
+            isAlive: wife1.isAlive,
+            targetPerson: { member: wife1, isSpouse: false }
+          });
+        }
+      } else if (member.parentId === 3 || (member.parentId === 1 && (member.motherId === 3 || member.branch === 'istri2'))) {
+        if (wife2) {
+          relations.push({
+            relation: 'Ibu',
+            name: wife2.name,
+            photo: wife2.photo,
+            gender: 'P',
+            isAlive: wife2.isAlive,
+            targetPerson: { member: wife2, isSpouse: false }
+          });
+        }
+      } else if (member.parentId) {
+        const parent = allMembers.find(m => m.id === member.parentId);
+        if (parent) {
+          if (parent.gender === 'P') {
+            relations.push({
+              relation: 'Ibu',
+              name: parent.name,
+              photo: parent.photo,
+              gender: 'P',
+              isAlive: parent.isAlive,
+              targetPerson: { member: parent, isSpouse: false }
+            });
+          } else {
+            const pSpouses = getMemberSpouses(parent, allMembers);
+            let motherSpouse: Spouse | undefined = undefined;
+            if (member.parentSpouseName) {
+              motherSpouse = pSpouses.find(s => s.name.trim().toLowerCase() === member.parentSpouseName?.trim().toLowerCase());
+            }
+            if (!motherSpouse && member.spouseIndex !== undefined && pSpouses[member.spouseIndex]) {
+              motherSpouse = pSpouses[member.spouseIndex];
+            }
+            if (!motherSpouse && pSpouses.length > 0) {
+              motherSpouse = pSpouses[0];
+            }
+
+            if (motherSpouse) {
+              const motherMember = allMembers.find(m => m.id === motherSpouse?.id || m.name === motherSpouse?.name);
+              relations.push({
+                relation: 'Ibu',
+                name: motherSpouse.name,
+                photo: motherSpouse.photo,
+                gender: 'P',
+                isAlive: motherSpouse.isAlive ?? true,
+                targetPerson: motherMember 
+                  ? { member: motherMember, isSpouse: false }
+                  : { member: parent, isSpouse: true, spouseObj: motherSpouse }
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // 3. Pasangan (Istri / Suami)
+    spouses.forEach((sp, sIdx) => {
+      const relLabel = isMale
+        ? (spouses.length > 1 ? (sIdx === 0 ? 'Istri Pertama' : sIdx === 1 ? 'Istri Kedua' : `Istri ke-${sIdx+1}`) : 'Istri')
+        : (spouses.length > 1 ? (sIdx === 0 ? 'Suami Pertama' : sIdx === 1 ? 'Suami Kedua' : `Suami ke-${sIdx+1}`) : 'Suami');
+      
+      const spMember = allMembers.find(m => m.id === sp.id || (m.name === sp.name && m.id !== member.id));
+      relations.push({
+        relation: relLabel,
+        name: sp.name,
+        photo: sp.photo,
+        gender: isMale ? 'P' : 'L',
+        isAlive: sp.isAlive ?? true,
+        targetPerson: spMember 
+          ? { member: spMember, isSpouse: false }
+          : { member: member, isSpouse: true, spouseObj: sp }
+      });
+    });
+
+    // 4. Anak
+    children.forEach(ch => {
+      relations.push({
+        relation: 'Anak',
+        name: ch.name,
+        photo: ch.photo,
+        gender: ch.gender,
+        isAlive: ch.isAlive,
+        targetPerson: { member: ch, isSpouse: false }
+      });
+    });
+
+    return {
+      name: member.name,
+      gender: member.gender,
+      isAlive: member.isAlive,
+      photo: member.photo,
+      birthDate: member.birthDate,
+      deathDate: member.deathDate,
+      domicile: member.domicile,
+      phone: member.phone,
+      subtitle,
+      maritalStatus,
+      childrenCount: children.length,
+      relations,
+      rawMember: member,
+      isSpouse: false
+    };
+  } else {
+    // Profil Pasangan (Spouse)
+    const sp: Spouse = spouseObj || {
+      id: `sp-${member.id}`,
+      name: member.spouse || 'Pasangan',
+      isAlive: member.spouseIsAlive ?? true,
+      photo: member.spousePhoto || '',
+      birthDate: member.spouseBirthDate || '',
+      deathDate: member.spouseDeathDate || '',
+      domicile: member.spouseDomicile || member.domicile || '',
+      phone: member.spousePhone || ''
+    };
+
+    const isSpouseMale = member.gender === 'P';
+    const subtitle = isSpouseMale ? `Suami dari ${member.name}` : `Istri dari ${member.name}`;
+    
+    // Children
+    const children = allMembers.filter(m => (m.parentId === member.id || m.motherId === member.id) && m.relationType !== 'spouse' && m.id !== 1 && m.id !== 2 && m.id !== 3);
+
+    const relations: FamilyRelationItem[] = [];
+
+    // Suami / Istri (Main Member)
+    relations.push({
+      relation: isSpouseMale ? 'Istri' : 'Suami',
+      name: member.name,
+      photo: member.photo,
+      gender: member.gender,
+      isAlive: member.isAlive,
+      targetPerson: { member, isSpouse: false }
+    });
+
+    // Anak
+    children.forEach(ch => {
+      relations.push({
+        relation: 'Anak',
+        name: ch.name,
+        photo: ch.photo,
+        gender: ch.gender,
+        isAlive: ch.isAlive,
+        targetPerson: { member: ch, isSpouse: false }
+      });
+    });
+
+    return {
+      name: sp.name,
+      gender: isSpouseMale ? 'L' : 'P',
+      isAlive: sp.isAlive ?? true,
+      photo: sp.photo,
+      birthDate: sp.birthDate,
+      deathDate: sp.deathDate,
+      domicile: sp.domicile || member.domicile,
+      phone: sp.phone,
+      subtitle,
+      maritalStatus: sp.isAlive ? 'Menikah' : 'Wafat',
+      childrenCount: children.length,
+      relations,
+      rawMember: member,
+      isSpouse: true,
+      spouseObj: sp
+    };
+  }
 }
 
 // ==========================================
@@ -1548,11 +1870,19 @@ function MarriageConnector({ label }: { label?: string }) {
   );
 }
 
-function PohonSilsilahTab({ members, showToast }: { members: Member[]; showToast?: (m: string, t?: 'success' | 'error') => void }) {
+function PohonSilsilahTab({ 
+  members, 
+  showToast,
+  onNavigateTab
+}: { 
+  members: Member[]; 
+  showToast?: (m: string, t?: 'success' | 'error') => void;
+  onNavigateTab?: (tab: 'dash' | 'pohon' | 'anggota' | 'agenda' | 'kas' | 'iuran') => void;
+}) {
   const [zoom, setZoom] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [expandAll, setExpandAll] = useState(true);
-  const [selectedProfile, setSelectedProfile] = useState<ProfileData | null>(null);
+  const [selectedTarget, setSelectedTarget] = useState<FamilyRelationTarget | null>(null);
 
   useEffect(() => { setZoom(1); setPosition({ x: 0, y: 0 }); }, []);
 
@@ -1653,48 +1983,8 @@ function PohonSilsilahTab({ members, showToast }: { members: Member[]; showToast
     return spouse ? `${parent.name} & ${spouse.name}` : parent.name;
   };
 
-  const handleProfileClick = (node: Member, isSpouse: boolean, spouseObj?: Spouse) => {
-    if (!isSpouse) {
-      const spouseNames = getMemberSpouses(node, members).map(s => s.name).filter(Boolean).join(', ');
-      setSelectedProfile({ 
-        name: node.name, 
-        isAlive: node.isAlive, 
-        gender: node.gender, 
-        photo: node.photo, 
-        birthDate: node.birthDate, 
-        deathDate: node.deathDate, 
-        domicile: node.domicile, 
-        phone: node.phone, 
-        spouse: spouseNames || '-', 
-        parentName: getParentLabel(node, false)
-      });
-    } else if (spouseObj) {
-      setSelectedProfile({ 
-        name: spouseObj.name, 
-        isAlive: spouseObj.isAlive, 
-        gender: node.gender === 'L' ? 'P' : 'L', 
-        photo: spouseObj.photo || '', 
-        birthDate: spouseObj.birthDate || '', 
-        deathDate: spouseObj.deathDate || '', 
-        domicile: spouseObj.domicile || '', 
-        phone: spouseObj.phone || '', 
-        spouse: node.name, 
-        parentName: '-' 
-      });
-    } else {
-      setSelectedProfile({ 
-        name: node.spouse || '', 
-        isAlive: node.spouseIsAlive ?? true, 
-        gender: node.gender === 'L' ? 'P' : 'L', 
-        photo: node.spousePhoto || '', 
-        birthDate: node.spouseBirthDate || '', 
-        deathDate: node.spouseDeathDate || '', 
-        domicile: node.spouseDomicile || '', 
-        phone: node.spousePhone || '', 
-        spouse: node.name, 
-        parentName: '-' 
-      });
-    }
+  const handleProfileClick = (node: Member, isSpouse: boolean = false, spouseObj?: Spouse) => {
+    setSelectedTarget({ member: node, isSpouse, spouseObj });
   };
 
   return (
@@ -1895,7 +2185,16 @@ function PohonSilsilahTab({ members, showToast }: { members: Member[]; showToast
         )}
       </PanZoomWrapper>
 
-      {selectedProfile && <ProfilePopupCard profile={selectedProfile} onClose={() => setSelectedProfile(null)} />}
+      {selectedTarget && (
+        <ProfilePopupCard 
+          initialTarget={selectedTarget} 
+          members={members} 
+          onClose={() => setSelectedTarget(null)} 
+          onNavigateToTree={() => {
+            setSelectedTarget(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -2240,34 +2539,196 @@ function TreeNode({
   );
 }
 
-function ProfilePopupCard({ profile, onClose }: { profile: ProfileData; onClose: () => void }) {
+function ProfilePopupCard({ 
+  initialTarget, 
+  members, 
+  onClose,
+  onNavigateToTree 
+}: { 
+  initialTarget: FamilyRelationTarget; 
+  members: Member[]; 
+  onClose: () => void;
+  onNavigateToTree?: () => void;
+}) {
+  const [currentTarget, setCurrentTarget] = useState<FamilyRelationTarget>(initialTarget);
+
+  const profile = useMemo(() => {
+    return buildFullProfileData(
+      currentTarget.member, 
+      members, 
+      currentTarget.isSpouse ?? false, 
+      currentTarget.spouseObj
+    );
+  }, [currentTarget, members]);
+
   return (
-    <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
-      <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden relative flex flex-col" onClick={e => e.stopPropagation()}>
-        <button className="absolute top-3 right-3 bg-black/50 text-white p-2 rounded-full z-10 hover:bg-black/70 transition cursor-pointer" onClick={onClose}><X size={18}/></button>
-        
-        <div className={`h-48 relative flex items-center justify-center ${profile.gender === 'L' ? 'bg-blue-50' : 'bg-pink-50'}`}>
-          {profile.photo ? <img src={profile.photo} className="w-full h-full object-cover" alt={profile.name} /> : <Users size={70} className="text-gray-300"/>}
-          <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-white to-transparent"></div>
-        </div>
-        
-        <div className="px-6 pb-8 pt-2 relative z-10 -mt-8">
-          <div className="flex justify-between items-end mb-4">
-            <div>
-               <h2 className="text-2xl font-black text-gray-800 leading-tight">{profile.name}</h2>
-               <p className="text-xs font-bold text-gray-500 mt-1 uppercase tracking-wider">{profile.gender === 'L' ? 'Laki-laki' : 'Perempuan'}</p>
+    <div 
+      className="fixed inset-0 z-[200] bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-fade-in" 
+      onClick={onClose}
+    >
+      <div 
+        className="bg-[#faf7f2] rounded-[2.25rem] w-full max-w-sm max-h-[92vh] shadow-2xl flex flex-col overflow-hidden relative border border-amber-200/60" 
+        onClick={e => e.stopPropagation()}
+      >
+        {/* TOMBOL TUTUP / CLOSE */}
+        <button 
+          className="absolute top-3.5 right-3.5 bg-black/5 hover:bg-black/15 text-gray-500 hover:text-gray-800 p-2 rounded-full z-20 transition cursor-pointer" 
+          onClick={onClose}
+          title="Tutup"
+        >
+          <X size={18}/>
+        </button>
+
+        <div className="p-5 sm:p-6 overflow-y-auto space-y-4">
+          
+          {/* FOTO PROFIL BULAT & HEADER */}
+          <div className="flex flex-col items-center">
+            <div className="relative my-1">
+              <div className="w-32 h-32 sm:w-36 sm:h-36 rounded-full p-1 bg-white shadow-xl border-2 border-amber-300/90 ring-4 ring-amber-200/70 overflow-hidden flex items-center justify-center transition-transform duration-200 hover:scale-[1.02]">
+                {profile.photo ? (
+                  <img src={profile.photo} className="w-full h-full rounded-full object-cover" alt={profile.name} />
+                ) : (
+                  <div className={`w-full h-full rounded-full flex items-center justify-center ${profile.gender === 'L' ? 'bg-blue-100/70 text-blue-500' : 'bg-pink-100/70 text-pink-500'}`}>
+                    <Users size={52} />
+                  </div>
+                )}
+              </div>
+              {!profile.isAlive && (
+                <span className="absolute bottom-1 right-1 bg-gray-800 text-white text-[9.5px] font-black px-2.5 py-0.5 rounded-full border-2 border-white shadow-md z-10">
+                  ALM
+                </span>
+              )}
             </div>
-            <span className={`px-3 py-1 text-[10px] font-black rounded-lg shadow-sm border ${profile.isAlive ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-gray-100 text-gray-600 border-gray-300'}`}>{profile.isAlive ? 'MASIH HIDUP' : 'MENINGGAL'}</span>
+
+            {/* NAMA LENGKAP */}
+            <h2 className="text-xl sm:text-2xl font-black text-gray-900 text-center mt-3 leading-tight tracking-tight">
+              {profile.name}
+            </h2>
+
+            {/* KETERANGAN GARIS KETURUNAN / SUBTITLE */}
+            <p className="text-xs text-amber-900/80 font-semibold text-center mt-1">
+              {profile.subtitle}
+            </p>
           </div>
 
-          <div className="space-y-3 text-xs bg-gray-50 p-4 rounded-2xl border border-gray-100">
-            <div className="flex justify-between border-b border-gray-200 pb-2"><span className="text-gray-500 font-semibold">Lahir</span><span className="font-bold text-gray-800">{profile.birthDate || '-'}</span></div>
-            {!profile.isAlive && <div className="flex justify-between border-b border-gray-200 pb-2"><span className="text-red-400 font-semibold">Wafat</span><span className="font-bold text-red-600">{profile.deathDate || '-'}</span></div>}
-            <div className="flex justify-between border-b border-gray-200 pb-2"><span className="text-gray-500 font-semibold">Domisili</span><span className="font-bold text-gray-800 text-right w-1/2 break-words">{profile.domicile || '-'}</span></div>
-            <div className="flex justify-between border-b border-gray-200 pb-2"><span className="text-gray-500 font-semibold">No HP</span><span className="font-bold text-gray-800">{profile.phone || '-'}</span></div>
-            <div className="flex justify-between border-b border-gray-200 pb-2"><span className="text-gray-500 font-semibold">Pasangan</span><span className="font-bold text-gray-800">{profile.spouse || '-'}</span></div>
-            <div className="flex justify-between"><span className="text-gray-500 font-semibold">Orang Tua</span><span className="font-bold text-gray-800">{profile.parentName || '-'}</span></div>
+          {/* KARTU INFORMASI UTAMA (TANGGAL LAHIR, DOMISILI, MENIKAH, JUMLAH ANAK) */}
+          <div className="bg-[#f2ece1]/90 rounded-2xl p-3.5 sm:p-4 space-y-3 border border-amber-200/50 shadow-xs text-xs text-gray-800 font-medium">
+            {/* ROW 1: TANGGAL LAHIR & USIA */}
+            <div className="flex items-center gap-3">
+              <div className="w-6 flex justify-center text-gray-600 flex-shrink-0">
+                <Calendar size={18} />
+              </div>
+              <span className="font-semibold text-gray-800 break-words flex-1">
+                {formatBirthDateAndAge(profile.birthDate, profile.isAlive, profile.deathDate)}
+              </span>
+            </div>
+
+            {/* ROW 2: DOMISILI */}
+            <div className="flex items-center gap-3">
+              <div className="w-6 flex justify-center text-gray-600 flex-shrink-0">
+                <MapPin size={18} />
+              </div>
+              <span className="font-semibold text-gray-800 break-words flex-1">
+                {profile.domicile || 'Domisili belum diisi'}
+              </span>
+            </div>
+
+            {/* ROW 3: STATUS PERNIKAHAN */}
+            <div className="flex items-center gap-3">
+              <div className="w-6 flex justify-center text-gray-600 flex-shrink-0">
+                <InfinityIcon size={18} />
+              </div>
+              <span className="font-semibold text-gray-800 flex-1">
+                {profile.maritalStatus}
+              </span>
+            </div>
+
+            {/* ROW 4: JUMLAH ANAK */}
+            <div className="flex items-center gap-3">
+              <div className="w-6 flex justify-center text-gray-600 flex-shrink-0">
+                <Users size={18} />
+              </div>
+              <span className="font-semibold text-gray-800 flex-1">
+                {profile.childrenCount > 0 ? `${profile.childrenCount} Anak` : 'Belum ada data anak'}
+              </span>
+            </div>
+
+            {/* OPSIONAL ROW 5: NO HP (JIKA ADA) */}
+            {profile.phone && profile.phone !== '-' && (
+              <div className="flex items-center gap-3 pt-1 border-t border-amber-200/40">
+                <div className="w-6 flex justify-center text-gray-600 flex-shrink-0">
+                  <Phone size={16} />
+                </div>
+                <span className="font-semibold text-gray-800 flex-1">
+                  {profile.phone}
+                </span>
+              </div>
+            )}
           </div>
+
+          {/* SECTION: HUBUNGAN KELUARGA */}
+          <div>
+            <h3 className="text-[11px] font-black text-gray-700 uppercase tracking-wider mb-2 px-1">
+              HUBUNGAN KELUARGA
+            </h3>
+
+            <div className="bg-[#f2ece1]/90 rounded-2xl divide-y divide-amber-200/50 border border-amber-200/50 overflow-hidden shadow-xs">
+              {profile.relations.length > 0 ? (
+                profile.relations.map((rel, idx) => (
+                  <div 
+                    key={idx}
+                    onClick={() => setCurrentTarget(rel.targetPerson)}
+                    className="flex items-center justify-between p-2.5 sm:p-3 hover:bg-amber-100/70 transition cursor-pointer group"
+                    title={`Klik untuk melihat profil ${rel.name} (${rel.relation})`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      {/* AVATAR KECIL */}
+                      <div className="w-10 h-10 rounded-full border border-white bg-white shadow-xs overflow-hidden flex-shrink-0 flex items-center justify-center">
+                        {rel.photo ? (
+                          <img src={rel.photo} className="w-full h-full object-cover" alt={rel.name} />
+                        ) : (
+                          <div className={`w-full h-full flex items-center justify-center ${rel.gender === 'L' ? 'bg-blue-50 text-blue-500' : 'bg-pink-50 text-pink-500'}`}>
+                            <Users size={16} />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* INFO HUBUNGAN & NAMA */}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[10px] font-bold text-gray-500 leading-tight">
+                          {rel.relation}
+                        </p>
+                        <p className="text-xs font-black text-gray-800 truncate group-hover:text-green-800 transition">
+                          {rel.name}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* CHEVRON PANAH KANAN */}
+                    <ChevronRight size={16} className="text-gray-400 group-hover:text-green-800 group-hover:translate-x-0.5 transition-transform flex-shrink-0 ml-2" />
+                  </div>
+                ))
+              ) : (
+                <div className="p-4 text-center text-xs text-gray-500 italic">
+                  Belum ada data hubungan keluarga terdaftar
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* TOMBOL LIHAT DI POHON KELUARGA */}
+          <div className="pt-2">
+            <button 
+              onClick={() => {
+                onNavigateToTree?.();
+                onClose();
+              }}
+              className="w-full bg-[#1b4332] hover:bg-[#143326] active:scale-[0.98] text-white font-bold py-3.5 px-6 rounded-full shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 text-sm cursor-pointer"
+            >
+              Lihat di Pohon Keluarga
+            </button>
+          </div>
+
         </div>
       </div>
     </div>
@@ -2277,11 +2738,21 @@ function ProfilePopupCard({ profile, onClose }: { profile: ProfileData; onClose:
 // ==========================================
 // TAMPILAN ANGGOTA
 // ==========================================
-function AnggotaTab({ members, isAdmin, showToast }: { members: Member[]; isAdmin: boolean; showToast: (m: string, t?: 'success' | 'error') => void }) {
+function AnggotaTab({ 
+  members, 
+  isAdmin, 
+  showToast,
+  onNavigateTab
+}: { 
+  members: Member[]; 
+  isAdmin: boolean; 
+  showToast: (m: string, t?: 'success' | 'error') => void;
+  onNavigateTab?: (tab: 'dash' | 'pohon' | 'anggota' | 'agenda' | 'kas' | 'iuran') => void;
+}) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Member | null>(null);
-  const [selectedProfile, setSelectedProfile] = useState<ProfileData | null>(null);
+  const [selectedTarget, setSelectedTarget] = useState<FamilyRelationTarget | null>(null);
   const [itemToDelete, setItemToDelete] = useState<number | null>(null);
   const [draggedMemberId, setDraggedMemberId] = useState<number | null>(null);
   const [dragOverMemberId, setDragOverMemberId] = useState<number | null>(null);
@@ -2351,48 +2822,8 @@ function AnggotaTab({ members, isAdmin, showToast }: { members: Member[]; isAdmi
     }
   };
 
-  const openProfile = (member: Member, isSpouse: boolean, spouseObj?: Spouse) => {
-    if (!isSpouse) {
-      const spouseNames = getMemberSpouses(member).map(s => s.name).filter(Boolean).join(', ');
-      setSelectedProfile({ 
-        name: member.name, 
-        isAlive: member.isAlive, 
-        gender: member.gender, 
-        photo: member.photo, 
-        birthDate: member.birthDate, 
-        deathDate: member.deathDate, 
-        domicile: member.domicile, 
-        phone: member.phone, 
-        spouse: spouseNames || '-', 
-        parentName: getMemberParentName(member, members)
-      });
-    } else if (spouseObj) {
-      setSelectedProfile({ 
-        name: spouseObj.name, 
-        isAlive: spouseObj.isAlive, 
-        gender: member.gender === 'L' ? 'P' : 'L', 
-        photo: spouseObj.photo || '', 
-        birthDate: spouseObj.birthDate || '', 
-        deathDate: spouseObj.deathDate || '', 
-        domicile: spouseObj.domicile || '', 
-        phone: spouseObj.phone || '', 
-        spouse: member.name, 
-        parentName: '-' 
-      });
-    } else {
-      setSelectedProfile({ 
-        name: member.spouse || '', 
-        isAlive: member.spouseIsAlive ?? true, 
-        gender: member.gender === 'L' ? 'P' : 'L', 
-        photo: member.spousePhoto || '', 
-        birthDate: member.spouseBirthDate || '', 
-        deathDate: member.spouseDeathDate || '', 
-        domicile: member.spouseDomicile || '', 
-        phone: member.spousePhone || '', 
-        spouse: member.name, 
-        parentName: '-' 
-      });
-    }
+  const openProfile = (member: Member, isSpouse: boolean = false, spouseObj?: Spouse) => {
+    setSelectedTarget({ member, isSpouse, spouseObj });
   };
 
   const executeDelete = async (id: number) => {
@@ -2641,7 +3072,17 @@ function AnggotaTab({ members, isAdmin, showToast }: { members: Member[]; isAdmi
       </div>
 
       {isModalOpen && <ModalFormAnggota member={editingItem} members={members} showToast={showToast} onClose={() => setIsModalOpen(false)} />}
-      {selectedProfile && <ProfilePopupCard profile={selectedProfile} onClose={() => setSelectedProfile(null)} />}
+      {selectedTarget && (
+        <ProfilePopupCard 
+          initialTarget={selectedTarget} 
+          members={members} 
+          onClose={() => setSelectedTarget(null)} 
+          onNavigateToTree={() => {
+            onNavigateTab?.('pohon');
+            setSelectedTarget(null);
+          }}
+        />
+      )}
       {itemToDelete !== null && <ConfirmModal title="Hapus Anggota" message="Yakin ingin menghapus anggota ini? Silsilah akan otomatis tersesuaikan dengan aman." onCancel={() => setItemToDelete(null)} onConfirm={() => executeDelete(itemToDelete)} />}
     </div>
   );
