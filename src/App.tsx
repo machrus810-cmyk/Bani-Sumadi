@@ -196,6 +196,9 @@ export interface Transaction {
 export interface SliderImage {
   id: number;
   url: string;
+  title?: string;
+  subtitle?: string;
+  description?: string;
 }
 
 export interface IuranRow {
@@ -230,8 +233,18 @@ const initialTransactions: Transaction[] = [
 ];
 
 const initialSliderImages: SliderImage[] = [
-  { id: 1, url: "https://images.unsplash.com/photo-1511895426328-dc8714191300?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80" },
-  { id: 2, url: "https://images.unsplash.com/photo-1609220136736-443140cffec6?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80" }
+  { 
+    id: 1, 
+    url: "https://images.unsplash.com/photo-1511895426328-dc8714191300?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
+    title: "Keluarga Besar KH. SUMADI",
+    subtitle: "Menjalin Silaturrahim, Mempererat Persaudaraan"
+  },
+  { 
+    id: 2, 
+    url: "https://images.unsplash.com/photo-1609220136736-443140cffec6?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
+    title: "Kebersamaan Bani Sumadi",
+    subtitle: "Guyub Rukun Saklawase Menjaga Amanah Keluarga"
+  }
 ];
 
 const initialIuranSessions: IuranSession[] = [
@@ -481,7 +494,7 @@ export default function BaniSumadiApp() {
         {/* MAIN CONTENT AREA */}
         <main className="flex-1 overflow-y-auto relative bg-gray-50">
           <div className="p-4 h-full">
-             {activeTab === 'dash' && <DashboardTab members={members} totalKas={totalKas} nextAgenda={nextAgenda} formatRupiah={formatRupiah} sliderImages={sliderImages} isAdmin={authRole === 'admin'} showToast={showToast} />}
+             {activeTab === 'dash' && <DashboardTab members={members} totalKas={totalKas} nextAgenda={nextAgenda} formatRupiah={formatRupiah} sliderImages={sliderImages} isAdmin={authRole === 'admin'} showToast={showToast} onNavigateTab={setActiveTab} />}
              {activeTab === 'pohon' && <PohonSilsilahTab members={members} showToast={showToast} />}
              {activeTab === 'anggota' && <AnggotaTab members={members} isAdmin={authRole === 'admin'} showToast={showToast} />}
              {activeTab === 'agenda' && <AgendaTab agendas={agendas} isAdmin={authRole === 'admin'} showToast={showToast} />}
@@ -595,7 +608,8 @@ function DashboardTab({
   formatRupiah, 
   sliderImages, 
   isAdmin, 
-  showToast 
+  showToast,
+  onNavigateTab
 }: { 
   members: Member[]; 
   totalKas: number; 
@@ -604,10 +618,11 @@ function DashboardTab({
   sliderImages: SliderImage[]; 
   isAdmin: boolean; 
   showToast: (m: string, t?: 'success' | 'error') => void;
+  onNavigateTab?: (tab: 'dash' | 'pohon' | 'anggota' | 'agenda' | 'kas' | 'iuran') => void;
 }) {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
-  const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
+  const [fullScreenIndex, setFullScreenIndex] = useState<number | null>(null);
   const [isDeceasedModalOpen, setIsDeceasedModalOpen] = useState(false);
 
   // MENGHITUNG STATISTIK MENYELURUH (Termasuk Semua Pasangan)
@@ -637,54 +652,168 @@ function DashboardTab({
   const allDeceased = [...deceasedMembers, ...deceasedSpouses];
 
   useEffect(() => {
-    if (sliderImages.length > 1 && !fullScreenImage && !isPhotoModalOpen) {
-      const timer = setInterval(() => setCurrentSlide(p => (p + 1) % sliderImages.length), 4000);
+    if (sliderImages.length > 1 && fullScreenIndex === null && !isPhotoModalOpen) {
+      const timer = setInterval(() => setCurrentSlide(p => (p + 1) % sliderImages.length), 4500);
       return () => clearInterval(timer);
     }
-  }, [sliderImages, fullScreenImage, isPhotoModalOpen]);
+  }, [sliderImages, fullScreenIndex, isPhotoModalOpen]);
 
   return (
     <div className="space-y-5 pb-6">
+      {/* KARTU INTERAKTIF: SALDO KAS & AGENDA */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="bg-gradient-to-br from-green-600 to-green-800 rounded-2xl p-4 text-white shadow-md relative overflow-hidden flex flex-col justify-center">
-          <p className="text-[11px] font-semibold mb-0.5 opacity-90">SALDO KAS</p>
-          <h2 className="text-xl font-bold break-words relative z-10">{formatRupiah(totalKas)}</h2>
-          <Wallet className="absolute -right-3 -bottom-3 opacity-10 w-20 h-20" />
+        {/* CARD SALDO KAS (INTERAKTIF -> KLIK MENUJU TAB KAS) */}
+        <div 
+          onClick={() => onNavigateTab?.('kas')}
+          className="group bg-gradient-to-br from-green-600 via-emerald-700 to-green-800 rounded-2xl p-4 text-white shadow-md hover:shadow-xl relative overflow-hidden flex flex-col justify-between cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 border border-green-500/30"
+          title="Klik untuk membuka menu Kas Keuangan"
+        >
+          <div className="flex justify-between items-start z-10">
+            <p className="text-[11px] font-bold tracking-wider opacity-90 uppercase">SALDO KAS</p>
+            <span className="text-[9px] bg-white/20 backdrop-blur-xs px-2 py-0.5 rounded-full font-bold flex items-center gap-0.5 group-hover:bg-white/30 transition">
+              Lihat <ChevronRight size={10} className="group-hover:translate-x-0.5 transition-transform" />
+            </span>
+          </div>
+          <div className="my-1 z-10">
+            <h2 className="text-xl font-black break-words leading-tight">{formatRupiah(totalKas)}</h2>
+            <p className="text-[9px] text-green-100/80 font-medium mt-0.5">Buka buku kas & transaksi</p>
+          </div>
+          <Wallet className="absolute -right-3 -bottom-3 opacity-15 w-20 h-20 group-hover:scale-110 group-hover:opacity-25 transition-all duration-300 pointer-events-none" />
         </div>
-        <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl p-4 text-white shadow-md flex flex-col justify-center relative overflow-hidden">
-          <p className="text-[11px] font-semibold mb-0.5 opacity-90 truncate relative z-10">{nextAgenda?.title || 'Agenda'}</p>
-          {nextAgenda ? (
-             <div className="flex items-end relative z-10">
-               <h2 className="text-2xl font-bold leading-none mr-1">{new Date(nextAgenda.date).getDate()}</h2>
-               <span className="text-sm font-semibold">{new Date(nextAgenda.date).toLocaleString('id-ID', { month: 'short' })}</span>
-             </div>
-          ) : <span className="text-sm font-medium opacity-80 relative z-10">Kosong</span>}
-          <Calendar className="absolute -right-2 -bottom-2 opacity-10 w-16 h-16" />
+
+        {/* CARD AGENDA (INTERAKTIF -> KLIK MENUJU TAB AGENDA) */}
+        <div 
+          onClick={() => onNavigateTab?.('agenda')}
+          className="group bg-gradient-to-br from-blue-600 via-indigo-600 to-indigo-800 rounded-2xl p-4 text-white shadow-md hover:shadow-xl flex flex-col justify-between relative overflow-hidden cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 border border-blue-400/30"
+          title="Klik untuk membuka menu Agenda"
+        >
+          <div className="flex justify-between items-start z-10">
+            <p className="text-[11px] font-bold tracking-wider opacity-90 uppercase truncate max-w-[90px]">
+              {nextAgenda ? 'AGENDA DEKAT' : 'AGENDA'}
+            </p>
+            <span className="text-[9px] bg-white/20 backdrop-blur-xs px-2 py-0.5 rounded-full font-bold flex items-center gap-0.5 group-hover:bg-white/30 transition">
+              Lihat <ChevronRight size={10} className="group-hover:translate-x-0.5 transition-transform" />
+            </span>
+          </div>
+          <div className="my-1 z-10">
+            {nextAgenda ? (
+              <>
+                <div className="flex items-baseline">
+                  <h2 className="text-2xl font-black leading-none mr-1.5">{new Date(nextAgenda.date).getDate()}</h2>
+                  <span className="text-xs font-bold uppercase">{new Date(nextAgenda.date).toLocaleString('id-ID', { month: 'short', year: 'numeric' })}</span>
+                </div>
+                <p className="text-[10px] font-semibold text-blue-100 truncate mt-0.5">{nextAgenda.title}</p>
+              </>
+            ) : (
+              <>
+                <span className="text-sm font-bold opacity-90">Belum ada agenda</span>
+                <p className="text-[9px] text-blue-100/70 font-medium">Klik untuk tambah agenda</p>
+              </>
+            )}
+          </div>
+          <Calendar className="absolute -right-2 -bottom-2 opacity-15 w-18 h-18 group-hover:scale-110 group-hover:opacity-25 transition-all duration-300 pointer-events-none" />
         </div>
       </div>
 
-      <div className="rounded-3xl overflow-hidden relative h-52 shadow-md bg-gray-200 flex items-center justify-center group">
+      {/* SLIDER FOTO DASHBOARD DENGAN CLICK TO ENLARGE YANG AKURAT */}
+      <div className="rounded-3xl overflow-hidden relative h-56 sm:h-64 shadow-md bg-gray-900 flex items-center justify-center group">
         {sliderImages.length > 0 ? (
           <>
             {sliderImages.map((img, idx) => (
-              <img key={img.id} src={img.url} onClick={() => setFullScreenImage(img.url)} className={`absolute inset-0 w-full h-full object-cover cursor-pointer transition-opacity duration-1000 ${idx === currentSlide ? 'opacity-100' : 'opacity-0'}`} alt="Slide" />
+              <div
+                key={img.id}
+                onClick={() => setFullScreenIndex(idx)}
+                className={`absolute inset-0 w-full h-full transition-opacity duration-700 ${
+                  idx === currentSlide 
+                    ? 'opacity-100 z-10 pointer-events-auto cursor-pointer' 
+                    : 'opacity-0 z-0 pointer-events-none'
+                }`}
+              >
+                <img 
+                  src={img.url} 
+                  className="w-full h-full object-cover select-none" 
+                  alt={img.title || "Slide"} 
+                />
+              </div>
             ))}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-4 text-white pointer-events-none">
-              <h3 className="font-bold text-lg leading-tight">Keluarga Besar KH. SUMADI</h3>
-              <p className="text-xs opacity-90">Menjalin Silaturrahim, Mempererat Persaudaraan</p>
+
+            {/* OVERLAY TULISAN/KETERANGAN PADA SLIDE AKTIF */}
+            <div 
+              onClick={() => setFullScreenIndex(currentSlide)}
+              className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/25 to-transparent flex flex-col justify-end p-4 text-white z-20 pointer-events-auto cursor-pointer"
+            >
+              <div className="flex justify-between items-end gap-2">
+                <div className="flex-1 min-w-0 pr-2">
+                  <h3 className="font-bold text-base sm:text-lg leading-snug drop-shadow-md truncate">
+                    {sliderImages[currentSlide]?.title || 'Keluarga Besar KH. SUMADI'}
+                  </h3>
+                  <p className="text-xs text-gray-200 opacity-90 drop-shadow-xs line-clamp-2 mt-0.5">
+                    {sliderImages[currentSlide]?.subtitle || sliderImages[currentSlide]?.description || 'Menjalin Silaturrahim, Mempererat Persaudaraan'}
+                  </p>
+                </div>
+                <span className="text-[10px] bg-white/20 backdrop-blur-md px-2.5 py-1 rounded-full font-bold flex-shrink-0 flex items-center gap-1 border border-white/20 shadow-xs">
+                  Perbesar <Maximize size={10} />
+                </span>
+              </div>
             </div>
+
+            {/* TOMBOL PREV / NEXT */}
             {sliderImages.length > 1 && (
               <>
-                <button onClick={() => setCurrentSlide((p) => (p - 1 + sliderImages.length) % sliderImages.length)} className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/40 p-1.5 rounded-full text-white hover:bg-black/70 transition cursor-pointer"><ChevronLeft size={20}/></button>
-                <button onClick={() => setCurrentSlide((p) => (p + 1) % sliderImages.length)} className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/40 p-1.5 rounded-full text-white hover:bg-black/70 transition cursor-pointer"><ChevronRight size={20}/></button>
+                <button 
+                  onClick={(e) => { 
+                    e.stopPropagation(); 
+                    setCurrentSlide((p) => (p - 1 + sliderImages.length) % sliderImages.length); 
+                  }} 
+                  className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/80 backdrop-blur-xs p-2 rounded-full text-white transition z-30 cursor-pointer shadow-md"
+                  title="Foto Sebelumnya"
+                >
+                  <ChevronLeft size={20}/>
+                </button>
+                <button 
+                  onClick={(e) => { 
+                    e.stopPropagation(); 
+                    setCurrentSlide((p) => (p + 1) % sliderImages.length); 
+                  }} 
+                  className="absolute right-3 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/80 backdrop-blur-xs p-2 rounded-full text-white transition z-30 cursor-pointer shadow-md"
+                  title="Foto Selanjutnya"
+                >
+                  <ChevronRight size={20}/>
+                </button>
+
+                {/* INDIKATOR NOMOR & DOTS */}
+                <div className="absolute top-3 right-3 flex items-center gap-1.5 z-30 bg-black/50 backdrop-blur-xs px-2.5 py-1 rounded-full border border-white/10">
+                  <span className="text-[10px] font-bold text-white mr-0.5">{currentSlide + 1}/{sliderImages.length}</span>
+                  {sliderImages.map((_, dotIdx) => (
+                    <button
+                      key={dotIdx}
+                      onClick={(e) => { e.stopPropagation(); setCurrentSlide(dotIdx); }}
+                      className={`h-1.5 rounded-full transition-all cursor-pointer ${dotIdx === currentSlide ? 'bg-white w-4' : 'bg-white/40 w-1.5 hover:bg-white/70'}`}
+                    />
+                  ))}
+                </div>
               </>
             )}
           </>
-        ) : <div className="text-gray-400 text-sm flex flex-col items-center"><ImageIcon size={32} className="mb-2 opacity-50"/> Belum ada foto</div>}
+        ) : (
+          <div className="text-gray-400 text-sm flex flex-col items-center">
+            <ImageIcon size={36} className="mb-2 opacity-50"/> 
+            <span>Belum ada foto dashboard</span>
+          </div>
+        )}
       </div>
 
-      {isAdmin && <button onClick={() => setIsPhotoModalOpen(true)} className="w-full bg-white border border-gray-200 text-gray-700 font-bold py-3 rounded-2xl flex items-center justify-center text-sm shadow-sm hover:bg-gray-50 cursor-pointer"><Camera size={18} className="mr-2 text-green-600" /> Kelola Foto Dashboard</button>}
+      {isAdmin && (
+        <button 
+          onClick={() => setIsPhotoModalOpen(true)} 
+          className="w-full bg-white border border-gray-200 hover:border-green-400 text-gray-700 hover:text-green-700 font-bold py-3 rounded-2xl flex items-center justify-center text-sm shadow-sm hover:shadow-md transition cursor-pointer"
+        >
+          <Camera size={18} className="mr-2 text-green-600" /> 
+          Kelola Foto & Tulisan Dashboard
+        </button>
+      )}
 
+      {/* STATISTIK ANGGOTA KELUARGA */}
       <div className="grid grid-cols-2 gap-3">
         <StatCard title="Total Anggota" value={totAnggota} color="bg-white border-gray-100 text-gray-800" />
         <StatCard title="Laki-laki" value={totLaki} color="bg-white border-gray-100 text-gray-800" />
@@ -696,9 +825,30 @@ function DashboardTab({
         </div>
       </div>
 
-      {isPhotoModalOpen && <ModalKelolaFoto sliderImages={sliderImages} showToast={showToast} onClose={() => setIsPhotoModalOpen(false)} />}
-      {fullScreenImage && <FullScreenImage src={fullScreenImage} onClose={() => setFullScreenImage(null)} />}
-      {isDeceasedModalOpen && <ModalDaftarMeninggal deceasedList={allDeceased} onClose={() => setIsDeceasedModalOpen(false)} />}
+      {/* MODAL KELOLA FOTO & TULISAN */}
+      {isPhotoModalOpen && (
+        <ModalKelolaFoto 
+          sliderImages={sliderImages} 
+          showToast={showToast} 
+          onClose={() => setIsPhotoModalOpen(false)} 
+        />
+      )}
+
+      {/* MODAL FULLSCREEN IMAGE DENGAN NAVIGASI SLIDE & KETERANGAN */}
+      {fullScreenIndex !== null && sliderImages[fullScreenIndex] && (
+        <FullScreenImage 
+          images={sliderImages} 
+          initialIndex={fullScreenIndex} 
+          onClose={() => setFullScreenIndex(null)} 
+        />
+      )}
+
+      {isDeceasedModalOpen && (
+        <ModalDaftarMeninggal 
+          deceasedList={allDeceased} 
+          onClose={() => setIsDeceasedModalOpen(false)} 
+        />
+      )}
     </div>
   );
 }
@@ -739,38 +889,179 @@ function ModalDaftarMeninggal({ deceasedList, onClose }: { deceasedList: Array<{
   );
 }
 
-function FullScreenImage({ src, onClose }: { src: string; onClose: () => void }) {
+function FullScreenImage({ 
+  images, 
+  initialIndex, 
+  onClose 
+}: { 
+  images: SliderImage[]; 
+  initialIndex: number; 
+  onClose: () => void; 
+}) {
+  const [index, setIndex] = useState(initialIndex);
+  const current = images[index] || images[0];
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowLeft' && images.length > 1) {
+        setIndex((p) => (p - 1 + images.length) % images.length);
+      }
+      if (e.key === 'ArrowRight' && images.length > 1) {
+        setIndex((p) => (p + 1) % images.length);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [images.length, onClose]);
+
+  if (!current) return null;
+
   return (
-    <div className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center p-4" onClick={onClose}>
-      <button className="absolute top-6 right-6 text-white hover:bg-white/20 p-2 rounded-full transition cursor-pointer z-10"><X size={24} /></button>
-      <img src={src} className="max-w-full max-h-[90vh] rounded-lg shadow-2xl object-contain animate-fade-in" alt="Full" />
+    <div className="fixed inset-0 z-[200] bg-black/95 flex flex-col items-center justify-between p-4 animate-fade-in" onClick={onClose}>
+      {/* HEADER ATAS */}
+      <div className="w-full flex justify-between items-center z-10 p-2" onClick={(e) => e.stopPropagation()}>
+        <div className="text-white/80 text-xs font-bold bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10">
+          Foto {index + 1} dari {images.length}
+        </div>
+        <button 
+          onClick={onClose} 
+          className="text-white hover:bg-white/20 p-2 rounded-full transition cursor-pointer bg-white/10 backdrop-blur-md border border-white/10"
+        >
+          <X size={20} />
+        </button>
+      </div>
+
+      {/* GAMBAR TENGAH */}
+      <div className="relative flex-1 flex items-center justify-center w-full max-h-[75vh]" onClick={(e) => e.stopPropagation()}>
+        <img 
+          src={current.url} 
+          className="max-w-full max-h-full rounded-2xl shadow-2xl object-contain animate-fade-in select-none" 
+          alt={current.title || "Full"} 
+        />
+
+        {/* TOMBOL PREV / NEXT */}
+        {images.length > 1 && (
+          <>
+            <button 
+              onClick={() => setIndex((p) => (p - 1 + images.length) % images.length)} 
+              className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/90 p-3 rounded-full text-white transition cursor-pointer shadow-lg border border-white/20"
+              title="Sebelumnya"
+            >
+              <ChevronLeft size={24}/>
+            </button>
+            <button 
+              onClick={() => setIndex((p) => (p + 1) % images.length)} 
+              className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/90 p-3 rounded-full text-white transition cursor-pointer shadow-lg border border-white/20"
+              title="Selanjutnya"
+            >
+              <ChevronRight size={24}/>
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* FOOTER KETERANGAN TULISAN DI BAWAH */}
+      <div className="w-full max-w-xl text-center text-white bg-black/60 backdrop-blur-md p-4 rounded-2xl border border-white/10 mt-3" onClick={(e) => e.stopPropagation()}>
+        <h3 className="font-bold text-base text-green-300">
+          {current.title || 'Keluarga Besar KH. SUMADI'}
+        </h3>
+        <p className="text-xs text-gray-200 mt-1">
+          {current.subtitle || current.description || 'Menjalin Silaturrahim, Mempererat Persaudaraan'}
+        </p>
+      </div>
     </div>
   );
 }
 
-function ModalKelolaFoto({ sliderImages, showToast, onClose }: { sliderImages: SliderImage[]; showToast: (m: string, t?: 'success' | 'error') => void; onClose: () => void }) {
+// ==========================================
+// MODAL KELOLA FOTO & TULISAN DASHBOARD
+// ==========================================
+function ModalKelolaFoto({ 
+  sliderImages, 
+  showToast, 
+  onClose 
+}: { 
+  sliderImages: SliderImage[]; 
+  showToast: (m: string, t?: 'success' | 'error') => void; 
+  onClose: () => void; 
+}) {
+  const [activeSubTab, setActiveSubTab] = useState<'list' | 'add' | 'edit'>('list');
+  
+  // State Tambah Baru
   const [newImage, setNewImage] = useState('');
+  const [newTitle, setNewTitle] = useState('');
+  const [newSubtitle, setNewSubtitle] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // State Edit Foto
+  const [editingPhoto, setEditingPhoto] = useState<SliderImage | null>(null);
+  const editFileRef = useRef<HTMLInputElement>(null);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newImage) return;
+    if (!newImage) {
+      showToast('Pilih gambar terlebih dahulu', 'error');
+      return;
+    }
     try {
       const id = Date.now();
-      await setDoc(getDocRef('sliderImages', id), { id, url: newImage });
+      const payload: SliderImage = { 
+        id, 
+        url: newImage,
+        title: newTitle.trim() || undefined,
+        subtitle: newSubtitle.trim() || undefined
+      };
+      await setDoc(getDocRef('sliderImages', id), cleanFirestoreData(payload));
       setNewImage('');
+      setNewTitle('');
+      setNewSubtitle('');
       if (fileRef.current) fileRef.current.value = '';
-      showToast('Foto berhasil disimpan ke Cloud Firebase', 'success');
+      showToast('Foto & keterangan berhasil ditambahkan ke Firebase', 'success');
+      setActiveSubTab('list');
     } catch (err) { 
       handleFirestoreError(err, OperationType.WRITE, 'sliderImages');
       showToast('Gagal mengunggah foto', 'error'); 
     }
   };
 
+  const handleStartEdit = (img: SliderImage) => {
+    setEditingPhoto({ ...img });
+    setActiveSubTab('edit');
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPhoto || !editingPhoto.url) {
+      showToast('Foto tidak boleh kosong', 'error');
+      return;
+    }
+    try {
+      const payload: SliderImage = {
+        id: editingPhoto.id,
+        url: editingPhoto.url,
+        title: editingPhoto.title?.trim() || undefined,
+        subtitle: (editingPhoto.subtitle || editingPhoto.description)?.trim() || undefined
+      };
+      await setDoc(getDocRef('sliderImages', editingPhoto.id), cleanFirestoreData(payload), { merge: true });
+      showToast('Foto & tulisan berhasil diperbarui di Firebase', 'success');
+      setEditingPhoto(null);
+      setActiveSubTab('list');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'sliderImages');
+      showToast('Gagal memperbarui data foto', 'error');
+    }
+  };
+
   const handleDelete = async (id: number) => {
+    if (!window.confirm('Yakin ingin menghapus foto slide ini?')) return;
     try {
       await deleteDoc(getDocRef('sliderImages', id));
       showToast('Foto berhasil dihapus dari Cloud Firebase', 'success');
+      if (editingPhoto?.id === id) {
+        setEditingPhoto(null);
+        setActiveSubTab('list');
+      }
     } catch (err) { 
       handleFirestoreError(err, OperationType.DELETE, 'sliderImages');
       showToast('Gagal menghapus foto', 'error'); 
@@ -778,31 +1069,262 @@ function ModalKelolaFoto({ sliderImages, showToast, onClose }: { sliderImages: S
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
-        <div className="bg-green-700 p-4 text-white flex justify-between items-center"><h2 className="font-bold text-sm">Kelola Foto Dashboard</h2><button onClick={onClose} className="cursor-pointer"><X size={20}/></button></div>
-        <div className="p-5 flex-1 overflow-y-auto space-y-4">
-          <form onSubmit={handleAdd} className="flex flex-col gap-3">
-            <div className="border-2 border-dashed border-gray-300 rounded-2xl p-6 flex flex-col items-center text-gray-400 relative">
-               <UploadCloud size={32} className="mb-2 text-green-500" />
-               <p className="text-xs font-bold">Pilih gambar</p>
-               <input type="file" accept="image/*" ref={fileRef} onChange={(e) => handleImageUpload(e, setNewImage)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
-            </div>
-            {newImage && <img src={newImage} className="w-full h-32 object-cover rounded-xl border" alt="Preview" />}
-            <button type="submit" disabled={!newImage} className="bg-green-600 disabled:bg-gray-200 text-white p-3.5 rounded-xl font-bold text-sm shadow-md cursor-pointer disabled:cursor-not-allowed">Simpan Foto ke Firebase</button>
-          </form>
-          <hr className="border-gray-100" />
-          <div className="space-y-2">
-            <p className="text-[10px] font-bold text-gray-500 uppercase">Daftar Foto ({sliderImages.length})</p>
-            <div className="grid grid-cols-2 gap-3">
-              {sliderImages.map((img) => (
-                <div key={img.id} className="relative rounded-xl overflow-hidden bg-gray-100 aspect-video">
-                  <img src={img.url} className="w-full h-full object-cover" alt="Slide" />
-                  <button onClick={() => handleDelete(img.id)} className="absolute top-1 right-1 bg-red-500 text-white p-1.5 rounded-full shadow hover:bg-red-600 cursor-pointer" title="Hapus"><Trash2 size={12} /></button>
-                </div>
-              ))}
-            </div>
+    <div className="fixed inset-0 bg-black/60 z-[150] flex items-center justify-center p-4 animate-fade-in">
+      <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+        {/* HEADER */}
+        <div className="bg-gradient-to-r from-green-700 to-emerald-700 p-4 text-white flex justify-between items-center">
+          <div>
+            <h2 className="font-bold text-sm">Kelola Foto & Tulisan Slide Dashboard</h2>
+            <p className="text-[10px] text-green-100">Tambah, edit judul/keterangan, dan atur foto slide</p>
           </div>
+          <button onClick={onClose} className="p-1.5 bg-white/20 hover:bg-white/30 rounded-full transition cursor-pointer">
+            <X size={18}/>
+          </button>
+        </div>
+
+        {/* TAB BUTTONS */}
+        <div className="flex border-b bg-gray-50 p-1.5 gap-1.5">
+          <button
+            onClick={() => setActiveSubTab('list')}
+            className={`flex-1 py-2 text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 ${
+              activeSubTab === 'list' ? 'bg-white text-green-700 shadow-xs border border-gray-200' : 'text-gray-600 hover:text-green-600'
+            }`}
+          >
+            <ImageIcon size={14} /> Daftar Foto ({sliderImages.length})
+          </button>
+          <button
+            onClick={() => { setEditingPhoto(null); setActiveSubTab('add'); }}
+            className={`flex-1 py-2 text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 ${
+              activeSubTab === 'add' ? 'bg-white text-green-700 shadow-xs border border-gray-200' : 'text-gray-600 hover:text-green-600'
+            }`}
+          >
+            <Plus size={14} /> Tambah Foto Baru
+          </button>
+          {activeSubTab === 'edit' && editingPhoto && (
+            <button
+              className="flex-1 py-2 text-xs font-bold rounded-xl bg-amber-50 text-amber-800 border border-amber-200 shadow-xs flex items-center justify-center gap-1.5"
+            >
+              <Edit2 size={14} /> Sedang Edit
+            </button>
+          )}
+        </div>
+
+        {/* CONTENT */}
+        <div className="p-5 flex-1 overflow-y-auto space-y-4">
+          {/* TAB 1: FORM TAMBAH FOTO BARU */}
+          {activeSubTab === 'add' && (
+            <form onSubmit={handleAdd} className="space-y-4">
+              <div className="border-2 border-dashed border-gray-300 hover:border-green-500 rounded-2xl p-6 flex flex-col items-center text-gray-400 relative transition bg-gray-50/50">
+                <UploadCloud size={36} className="mb-2 text-green-600" />
+                <p className="text-xs font-bold text-gray-700">Pilih / Unggah Gambar Slide</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">Format JPG, PNG, WEBP</p>
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  ref={fileRef} 
+                  onChange={(e) => handleImageUpload(e, setNewImage)} 
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
+                  required
+                />
+              </div>
+
+              {newImage && (
+                <div className="relative rounded-2xl overflow-hidden border shadow-sm aspect-video bg-black/5">
+                  <img src={newImage} className="w-full h-full object-cover" alt="Preview" />
+                  <button 
+                    type="button" 
+                    onClick={() => { setNewImage(''); if (fileRef.current) fileRef.current.value = ''; }}
+                    className="absolute top-2 right-2 bg-black/60 text-white p-1 rounded-full hover:bg-black/80"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Judul / Nama Acara (Opsional)</label>
+                <input 
+                  type="text" 
+                  placeholder="Contoh: Halal Bihalal Idul Fitri 2026" 
+                  value={newTitle} 
+                  onChange={(e) => setNewTitle(e.target.value)} 
+                  className="w-full border p-2.5 rounded-xl text-xs outline-none focus:border-green-600 font-medium" 
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Keterangan / Tulisan (Opsional)</label>
+                <textarea 
+                  placeholder="Contoh: Silaturrahim Bani Sumadi di kediaman Mbah KH. Sumadi" 
+                  value={newSubtitle} 
+                  onChange={(e) => setNewSubtitle(e.target.value)} 
+                  rows={2}
+                  className="w-full border p-2.5 rounded-xl text-xs outline-none focus:border-green-600 font-medium resize-none" 
+                />
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button 
+                  type="button" 
+                  onClick={() => setActiveSubTab('list')} 
+                  className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl font-bold text-xs hover:bg-gray-200 transition cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={!newImage} 
+                  className="flex-1 bg-green-600 disabled:bg-gray-200 text-white py-3 rounded-xl font-bold text-xs shadow-md hover:bg-green-700 transition cursor-pointer disabled:cursor-not-allowed"
+                >
+                  Simpan Foto ke Firebase
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* TAB 2: FORM EDIT FOTO & TULISAN */}
+          {activeSubTab === 'edit' && editingPhoto && (
+            <form onSubmit={handleSaveEdit} className="space-y-4 bg-amber-50/50 p-4 rounded-2xl border border-amber-200">
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                  <Edit2 size={14} /> Edit Tulisan & Gambar Foto
+                </span>
+                <button 
+                  type="button" 
+                  onClick={() => { setEditingPhoto(null); setActiveSubTab('list'); }} 
+                  className="text-gray-400 hover:text-gray-600 text-xs font-semibold cursor-pointer"
+                >
+                  Tutup Edit
+                </button>
+              </div>
+
+              {/* PREVIEW & GANTI GAMBAR */}
+              <div className="relative rounded-2xl overflow-hidden border shadow-sm aspect-video bg-black/10">
+                <img src={editingPhoto.url} className="w-full h-full object-cover" alt="Preview Edit" />
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                  <label className="bg-white text-gray-800 px-3 py-1.5 rounded-xl font-bold text-xs shadow-md cursor-pointer flex items-center gap-1.5">
+                    <UploadCloud size={14} className="text-green-600" /> Ganti Gambar
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      ref={editFileRef} 
+                      onChange={(e) => handleImageUpload(e, (url) => setEditingPhoto({ ...editingPhoto, url }))} 
+                      className="hidden" 
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Judul / Nama Acara</label>
+                <input 
+                  type="text" 
+                  placeholder="Contoh: Reuni Keluarga Besar" 
+                  value={editingPhoto.title || ''} 
+                  onChange={(e) => setEditingPhoto({ ...editingPhoto, title: e.target.value })} 
+                  className="w-full border bg-white p-2.5 rounded-xl text-xs outline-none focus:border-amber-600 font-medium" 
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Keterangan / Tulisan</label>
+                <textarea 
+                  placeholder="Contoh: Menjalin Silaturrahim dan Kebersamaan..." 
+                  value={editingPhoto.subtitle || editingPhoto.description || ''} 
+                  onChange={(e) => setEditingPhoto({ ...editingPhoto, subtitle: e.target.value, description: e.target.value })} 
+                  rows={2}
+                  className="w-full border bg-white p-2.5 rounded-xl text-xs outline-none focus:border-amber-600 font-medium resize-none" 
+                />
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button 
+                  type="button" 
+                  onClick={() => { setEditingPhoto(null); setActiveSubTab('list'); }} 
+                  className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-xl font-bold text-xs hover:bg-gray-300 transition cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button 
+                  type="submit" 
+                  className="flex-1 bg-amber-600 text-white py-3 rounded-xl font-bold text-xs shadow-md hover:bg-amber-700 transition cursor-pointer"
+                >
+                  Simpan Perubahan
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* TAB 3: DAFTAR SEMUA FOTO */}
+          {activeSubTab === 'list' && (
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <p className="text-[11px] font-bold text-gray-500 uppercase">
+                  Daftar Foto Slide ({sliderImages.length})
+                </p>
+                <button 
+                  onClick={() => setActiveSubTab('add')} 
+                  className="text-xs text-green-700 font-bold flex items-center gap-1 hover:underline cursor-pointer"
+                >
+                  <Plus size={14} /> Tambah Foto
+                </button>
+              </div>
+
+              {sliderImages.length === 0 ? (
+                <div className="text-center py-10 text-gray-400">
+                  <ImageIcon size={36} className="mx-auto mb-2 opacity-50"/>
+                  <p className="text-xs font-medium">Belum ada foto yang diunggah.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {sliderImages.map((img, idx) => (
+                    <div 
+                      key={img.id} 
+                      className="flex items-center gap-3 p-3 rounded-2xl border border-gray-200 bg-white hover:border-green-300 shadow-xs transition"
+                    >
+                      {/* THUMBNAIL */}
+                      <div className="w-24 h-16 rounded-xl overflow-hidden bg-gray-100 flex-shrink-0 border">
+                        <img src={img.url} className="w-full h-full object-cover" alt={img.title || "Slide"} />
+                      </div>
+
+                      {/* TEXT INFO */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[9px] font-bold bg-green-100 text-green-800 px-1.5 py-0.2 rounded-md">
+                            #{idx + 1}
+                          </span>
+                          <h4 className="font-bold text-xs text-gray-800 truncate">
+                            {img.title || 'Keluarga Besar KH. SUMADI'}
+                          </h4>
+                        </div>
+                        <p className="text-[10.5px] text-gray-500 line-clamp-1 mt-0.5">
+                          {img.subtitle || img.description || 'Menjalin Silaturrahim, Mempererat Persaudaraan'}
+                        </p>
+                      </div>
+
+                      {/* ACTIONS: EDIT & DELETE */}
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button 
+                          onClick={() => handleStartEdit(img)} 
+                          className="p-2 bg-amber-50 text-amber-700 hover:bg-amber-100 rounded-xl transition cursor-pointer border border-amber-200" 
+                          title="Edit Foto & Tulisan"
+                        >
+                          <Edit2 size={14} />
+                        </button>
+                        <button 
+                          onClick={() => handleDelete(img.id)} 
+                          className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-xl transition cursor-pointer border border-red-200" 
+                          title="Hapus Foto"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
