@@ -11,6 +11,9 @@ import {
 } from 'firebase/auth';
 import { 
   getFirestore, 
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   collection, 
   doc, 
   getDocs, 
@@ -25,10 +28,23 @@ import firebaseConfig from '../firebase-applet-config.json';
 // Initialize Firebase App
 export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-// CRITICAL: Must pass firestoreDatabaseId if configured in firebase-applet-config.json
-export const db = firebaseConfig.firestoreDatabaseId 
-  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
-  : getFirestore(app);
+// Initialize Firestore with IndexedDB persistent local cache for offline support
+let firestoreDb;
+try {
+  firestoreDb = firebaseConfig.firestoreDatabaseId 
+    ? initializeFirestore(app, {
+        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+      }, firebaseConfig.firestoreDatabaseId)
+    : initializeFirestore(app, {
+        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+      });
+} catch (e) {
+  firestoreDb = firebaseConfig.firestoreDatabaseId 
+    ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+    : getFirestore(app);
+}
+
+export const db = firestoreDb;
 
 export const auth = getAuth(app);
 export const appId = firebaseConfig.projectId || 'ai-studio-applet-webapp-326e4';

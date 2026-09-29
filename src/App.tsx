@@ -26,6 +26,8 @@ import {
 } from './firebase';
 
 import ImageCropperModal from './ImageCropperModal';
+import { PWAInstallButton } from './PWAInstallButton';
+import { OfflineIndicator } from './OfflineIndicator';
 
 // --- DATA SILSILAH AWAL (Mbah Sumadi, Istri 1 & Istri 2 tanpa form "Pasangan") ---
 export interface Spouse {
@@ -357,13 +359,13 @@ export default function BaniSumadiApp() {
   // TOAST NOTIFICATION STATE
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
-  // State tersinkronisasi Firebase Cloud
-  const [members, setMembers] = useState<Member[]>([]);
-  const [agendas, setAgendas] = useState<Agenda[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [kasSessions, setKasSessions] = useState<KasSession[]>([]);
-  const [sliderImages, setSliderImages] = useState<SliderImage[]>([]);
-  const [iuranSessions, setIuranSessions] = useState<IuranSession[]>([]);
+  // State tersinkronisasi Firebase Cloud (dengan data awal agar langsung bisa diakses offline)
+  const [members, setMembers] = useState<Member[]>(initialMembers);
+  const [agendas, setAgendas] = useState<Agenda[]>(initialAgendas);
+  const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
+  const [kasSessions, setKasSessions] = useState<KasSession[]>(initialKasSessions);
+  const [sliderImages, setSliderImages] = useState<SliderImage[]>(initialSliderImages);
+  const [iuranSessions, setIuranSessions] = useState<IuranSession[]>(initialIuranSessions);
   const hasSeeded = useRef(false);
 
   // Global Toast Function
@@ -398,6 +400,7 @@ export default function BaniSumadiApp() {
 
     const seedDatabase = async () => {
       if (hasSeeded.current) return;
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return;
       hasSeeded.current = true;
 
       const refs = [
@@ -517,6 +520,7 @@ export default function BaniSumadiApp() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            <PWAInstallButton variant="header" />
             {authRole === 'admin' ? (
               <button 
                 onClick={() => {
@@ -583,6 +587,9 @@ export default function BaniSumadiApp() {
             onClose={() => setIsAdminLoginOpen(false)}
           />
         )}
+
+        {/* OFFLINE STATUS NOTIFICATION */}
+        <OfflineIndicator />
       </div>
     </div>
   );
@@ -731,6 +738,9 @@ function DashboardTab({
 
   return (
     <div className="space-y-5 pb-6">
+      {/* PWA INSTALL BANNER */}
+      <PWAInstallButton variant="banner" />
+
       {/* KARTU INTERAKTIF: SALDO KAS & AGENDA */}
       <div className="grid grid-cols-2 gap-3">
         {/* CARD SALDO KAS (INTERAKTIF -> KLIK MENUJU TAB KAS) */}

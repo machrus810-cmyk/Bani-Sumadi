@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#15803d"/>
+      <stop offset="50%" stop-color="#166534"/>
+      <stop offset="100%" stop-color="#14532d"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="50%" stop-color="#facc15"/>
+      <stop offset="100%" stop-color="#eab308"/>
+    </linearGradient>
+  </defs>
+  <!-- Background Circle / Squircle -->
+  <rect width="512" height="512" rx="128" fill="url(#bgGrad)" />
+  
+  <!-- Outer Gold Border -->
+  <rect x="24" y="24" width="464" height="464" rx="104" fill="none" stroke="url(#goldGrad)" stroke-width="8" stroke-dasharray="16 8" opacity="0.6"/>
+  
+  <!-- Inner Badge Group -->
+  <g transform="translate(256, 256)">
+    <!-- Central Shield / Circle -->
+    <circle r="160" fill="#ffffff" fill-opacity="0.12" stroke="url(#goldGrad)" stroke-width="6"/>
+
+    <!-- Tree / Family Lineage Icon -->
+    <!-- Tree Trunk -->
+    <path d="M -16 60 L 16 60 L 12 110 L -12 110 Z" fill="url(#goldGrad)"/>
+    <path d="M -60 115 Q 0 100 60 115" stroke="url(#goldGrad)" stroke-width="8" stroke-linecap="round" fill="none"/>
+
+    <!-- Lineage nodes & connections -->
+    <!-- Top Apex Node (Mbah KH. Sumadi) -->
+    <circle cx="0" cy="-90" r="26" fill="url(#goldGrad)" stroke="#ffffff" stroke-width="4"/>
+    
+    <!-- Connector Lines -->
+    <path d="M 0 -64 L 0 -10" stroke="#ffffff" stroke-width="6" stroke-linecap="round"/>
+    <path d="M -80 0 L 80 0" stroke="#ffffff" stroke-width="6" stroke-linecap="round"/>
+    <path d="M -80 0 L -80 30" stroke="#ffffff" stroke-width="6" stroke-linecap="round"/>
+    <path d="M 80 0 L 80 30" stroke="#ffffff" stroke-width="6" stroke-linecap="round"/>
+    <path d="M 0 -10 L 0 30" stroke="#ffffff" stroke-width="6" stroke-linecap="round"/>
+
+    <!-- Two Wives & Middle branches -->
+    <!-- Left: Mbah Munasikah -->
+    <circle cx="-80" cy="40" r="20" fill="url(#goldGrad)" stroke="#ffffff" stroke-width="3"/>
+    <!-- Right: Mbah Masripah -->
+    <circle cx="80" cy="40" r="20" fill="url(#goldGrad)" stroke="#ffffff" stroke-width="3"/>
+    <!-- Center descendants -->
+    <circle cx="0" cy="40" r="16" fill="#ffffff" fill-opacity="0.9"/>
+  </g>
+</svg>
