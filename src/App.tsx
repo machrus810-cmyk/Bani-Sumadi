@@ -28,6 +28,7 @@ import {
 import ImageCropperModal from './ImageCropperModal';
 import { PWAInstallButton } from './PWAInstallButton';
 import { OfflineIndicator } from './OfflineIndicator';
+import { SplashScreen } from './SplashScreen';
 
 // --- DATA SILSILAH AWAL (Mbah Sumadi, Istri 1 & Istri 2 tanpa form "Pasangan") ---
 export interface Spouse {
@@ -487,6 +488,9 @@ export default function BaniSumadiApp() {
 
   return (
     <div className="min-h-screen bg-gray-100 flex justify-center font-sans text-gray-800">
+      {/* LOGO PEMBUKA / OPENING SPLASH SCREEN */}
+      <SplashScreen minDisplayTimeMs={1700} />
+
       <div className="w-full max-w-md bg-white shadow-xl relative pb-20 flex flex-col min-h-screen overflow-hidden">
         
         {/* GLOBAL TOAST NOTIFICATION */}
@@ -498,25 +502,35 @@ export default function BaniSumadiApp() {
         )}
 
         {/* HEADER */}
-        <header className="bg-green-700 text-white p-3.5 sm:p-4 sticky top-0 z-20 flex justify-between items-center shadow-md">
-          <div className="flex flex-col min-w-0 pr-2">
-             <div className="flex items-center gap-2 flex-wrap">
-               <h1 className="text-base sm:text-lg font-black tracking-wide leading-tight">
-                 Keluarga Besar KH. SUMADI
-               </h1>
-               {authRole === 'admin' ? (
-                 <span className="bg-amber-400 text-amber-950 font-black text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1 shadow-sm shrink-0">
-                   <ShieldCheck size={11} /> Admin
-                 </span>
-               ) : (
-                 <span className="bg-green-800/90 text-green-200 font-semibold text-[9px] px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0">
-                   Anggota
-                 </span>
-               )}
+        <header className="bg-green-700 text-white p-3 sm:p-3.5 sticky top-0 z-20 flex justify-between items-center shadow-md">
+          <div className="flex items-center gap-2.5 min-w-0 pr-2">
+             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full p-0.5 bg-gradient-to-tr from-amber-400 to-yellow-300 shadow-md shrink-0 flex items-center justify-center overflow-hidden">
+               <img 
+                 src="/logo.jpg" 
+                 alt="Logo Bani Sumadi" 
+                 referrerPolicy="no-referrer"
+                 className="w-full h-full object-cover rounded-full"
+               />
              </div>
-             <span className="text-[10px] font-medium text-green-100 opacity-90 tracking-normal mt-0.5 truncate">
-               Menjalin Silaturrahim, Mempererat Persaudaraan
-             </span>
+             <div className="flex flex-col min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <h1 className="text-sm sm:text-base font-black tracking-wide leading-tight truncate">
+                    Keluarga Besar KH. SUMADI
+                  </h1>
+                  {authRole === 'admin' ? (
+                    <span className="bg-amber-400 text-amber-950 font-black text-[8.5px] px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1 shadow-sm shrink-0">
+                      <ShieldCheck size={11} /> Admin
+                    </span>
+                  ) : (
+                    <span className="bg-green-800/90 text-green-200 font-semibold text-[8.5px] px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0">
+                      Anggota
+                    </span>
+                  )}
+                </div>
+                <span className="text-[9.5px] font-medium text-green-100 opacity-90 tracking-normal mt-0.5 truncate">
+                  Menjalin Silaturrahim, Mempererat Persaudaraan
+                </span>
+             </div>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
