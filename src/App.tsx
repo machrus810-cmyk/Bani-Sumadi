@@ -3,7 +3,8 @@ import {
   Users, Calendar, Wallet, Network, LayoutDashboard, 
   LogOut, Plus, Edit2, Trash2, Search, ChevronLeft, 
   ChevronRight, Camera, Image as ImageIcon, UploadCloud, X, Download, FolderPlus,
-  Minus, Maximize, FileText, CheckCircle, Lock, ShieldCheck
+  Minus, Maximize, FileText, CheckCircle, Lock, ShieldCheck,
+  ArrowUp, ArrowDown, GripVertical
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -18,7 +19,8 @@ import {
   deleteDoc, 
   onSnapshot,
   handleFirestoreError,
-  OperationType
+  OperationType,
+  cleanFirestoreData
 } from './firebase';
 
 import ImageCropperModal from './ImageCropperModal';
@@ -41,6 +43,8 @@ export interface Member {
   isAlive: boolean;
   gender: 'L' | 'P';
   parentId: number | null;
+  motherId?: number | null;
+  branch?: 'istri1' | 'istri2';
   relationType?: 'child' | 'spouse';
   spouseOfId?: number | null;
   spouse?: string;
@@ -56,6 +60,9 @@ export interface Member {
   spouseBirthDate?: string;
   spouseDeathDate?: string;
   spouses?: Spouse[];
+  parentSpouseName?: string;
+  spouseIndex?: number;
+  order?: number;
 }
 
 export const getMemberSpouses = (m: Member, allMembers?: Member[]): Spouse[] => {
@@ -88,7 +95,19 @@ export const getMemberSpouses = (m: Member, allMembers?: Member[]): Spouse[] => 
   // Cek jika ada anggota mandiri yang terhubung sebagai pasangan anggota ini
   if (allMembers && Array.isArray(allMembers)) {
     allMembers.forEach(m2 => {
-      if (m2.id !== m.id && (m2.spouseOfId === m.id || (m2.relationType === 'spouse' && m2.parentId === m.id))) {
+      // Pastikan m2 bukan anak (anak tidak boleh dianggap pasangan)
+      if (m2.relationType === 'child') return;
+
+      const isSpouseOfThis = 
+        m2.id !== m.id && 
+        (
+          m2.spouseOfId === m.id || 
+          (m2.relationType === 'spouse' && (m2.spouseOfId === m.id || m2.parentId === m.id)) ||
+          // Deteksi istri KH. Sumadi
+          (m.id === 1 && (m2.id === 2 || m2.id === 3 || m2.name?.toLowerCase().includes('istri')))
+        );
+
+      if (isSpouseOfThis) {
         if (!seenNames.has(m2.name.trim().toLowerCase())) {
           result.push({
             id: m2.id,
@@ -107,6 +126,55 @@ export const getMemberSpouses = (m: Member, allMembers?: Member[]): Spouse[] => 
   }
 
   return result;
+};
+
+export const getMemberBranch = (member: Member, allMembers: Member[]): 'istri1' | 'istri2' => {
+  if (member.id === 2 || member.parentId === 2 || (member.parentId === 1 && member.motherId === 2) || member.branch === 'istri1') {
+    return 'istri1';
+  }
+  if (member.id === 3 || member.parentId === 3 || (member.parentId === 1 && member.motherId === 3) || member.branch === 'istri2') {
+    return 'istri2';
+  }
+  if (member.parentId) {
+    const parent = allMembers.find(m => m.id === member.parentId);
+    if (parent) return getMemberBranch(parent, allMembers);
+  }
+  return 'istri1';
+};
+
+export const getMemberParentName = (member: Member, allMembers: Member[]): string => {
+  if (member.id === 1) return 'Pemuncak Silsilah (Akar Utama)';
+  if (member.id === 2 || member.id === 3) return '-';
+  if (member.parentId === 2 || (member.parentId === 1 && member.motherId === 2)) {
+    return 'Mbah KH. Sumadi & Mbah Masripah (Istri 1)';
+  }
+  if (member.parentId === 3 || (member.parentId === 1 && member.motherId === 3)) {
+    return 'Mbah KH. Sumadi & Mbah Munasikah (Istri 2)';
+  }
+  if (member.parentId) {
+    const parent = allMembers.find(m => m.id === member.parentId);
+    if (parent) {
+      if (member.parentSpouseName) {
+        return `${parent.name} & ${member.parentSpouseName}`;
+      }
+      const spouses = getMemberSpouses(parent, allMembers);
+      if (member.spouseIndex !== undefined && member.spouseIndex !== null && spouses[member.spouseIndex]) {
+        return `${parent.name} & ${spouses[member.spouseIndex].name}`;
+      }
+      if (spouses.length > 0) {
+        return `${parent.name} & ${spouses[0].name}`;
+      }
+      const spouse = allMembers.find(s => s.id === parent.spouseOfId || (s.parentId === parent.id && s.relationType === 'spouse')) || (parent.spouse ? { name: parent.spouse } : null);
+      return spouse ? `${parent.name} & ${spouse.name}` : parent.name;
+    }
+  }
+  if (member.branch === 'istri2') {
+    return 'Mbah KH. Sumadi & Mbah Munasikah (Istri 2)';
+  }
+  if (member.branch === 'istri1') {
+    return 'Mbah KH. Sumadi & Mbah Masripah (Istri 1)';
+  }
+  return '-';
 };
 
 export interface Agenda {
@@ -142,26 +210,13 @@ export interface IuranSession {
   data: IuranRow[];
 }
 
-const initialMembers: Member[] = [
-  { id: 1, name: "Mbah Sumadi", isAlive: false, gender: "L", parentId: null, spouse: "", domicile: "Yogyakarta", phone: "-", birthDate: "1940-01-01", deathDate: "2010-05-10", photo: "", spousePhoto: "", spouseIsAlive: true, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "" },
-  { id: 2, name: "Mbah Aminah (Istri 1)", isAlive: false, gender: "P", parentId: 1, spouse: "", domicile: "Yogyakarta", phone: "-", birthDate: "1945-03-12", deathDate: "2010-08-20", photo: "", spousePhoto: "", spouseIsAlive: true, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "" },
-  { id: 3, name: "Mbah Yanti (Istri 2)", isAlive: false, gender: "P", parentId: 1, spouse: "", domicile: "Solo", phone: "-", birthDate: "1948-07-22", deathDate: "2018-11-05", photo: "", spousePhoto: "", spouseIsAlive: true, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "" },
-  
-  // Keturunan Istri 1
-  { id: 21, name: "Budi Santoso", isAlive: true, gender: "L", parentId: 2, spouse: "Ratna", domicile: "Jakarta", phone: "08123456789", birthDate: "1970-05-15", deathDate: null, photo: "", spousePhoto: "", spouseIsAlive: true, spouseDomicile: "Jakarta", spousePhone: "08111", spouseBirthDate: "1972-01-01", spouseDeathDate: "" },
-  { id: 22, name: "Ani Sumadi", isAlive: true, gender: "P", parentId: 2, spouse: "Joko", domicile: "Surabaya", phone: "08198765432", birthDate: "1975-08-20", deathDate: null, photo: "", spousePhoto: "", spouseIsAlive: true, spouseDomicile: "Surabaya", spousePhone: "08222", spouseBirthDate: "1970-02-02", spouseDeathDate: "" },
-  { id: 211, name: "Andi Saputra", isAlive: true, gender: "L", parentId: 21, spouse: "Sari", domicile: "Jakarta", phone: "08111222333", birthDate: "1995-12-01", deathDate: null, photo: "", spousePhoto: "", spouseIsAlive: true, spouseDomicile: "Jakarta", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "" },
-  { id: 212, name: "Risa Santoso", isAlive: true, gender: "P", parentId: 21, spouse: "Rudi", domicile: "Bandung", phone: "08555666777", birthDate: "1998-04-10", deathDate: null, photo: "", spousePhoto: "", spouseIsAlive: true, spouseDomicile: "Bandung", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "" },
-  { id: 221, name: "Bima", isAlive: true, gender: "L", parentId: 22, spouse: "", domicile: "Surabaya", phone: "-", birthDate: "2000-09-09", deathDate: null, photo: "", spousePhoto: "", spouseIsAlive: true, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "" },
-  { id: 2111, name: "Zeta (Cicit)", isAlive: true, gender: "P", parentId: 211, spouse: "", domicile: "Jakarta", phone: "-", birthDate: "2022-01-15", deathDate: null, photo: "", spousePhoto: "", spouseIsAlive: true, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "" },
-
-  // Keturunan Istri 2
-  { id: 31, name: "Tejo Kusumo", isAlive: true, gender: "L", parentId: 3, spouse: "Lina", domicile: "Semarang", phone: "082233445566", birthDate: "1972-11-11", deathDate: null, photo: "", spousePhoto: "", spouseIsAlive: true, spouseDomicile: "Semarang", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "" },
-  { id: 32, name: "Siti Aisyah", isAlive: true, gender: "P", parentId: 3, spouse: "Ahmad", domicile: "Yogyakarta", phone: "087788990011", birthDate: "1978-02-25", deathDate: null, photo: "", spousePhoto: "", spouseIsAlive: true, spouseDomicile: "Yogyakarta", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "" },
-  { id: 311, name: "Gilang Kusumo", isAlive: true, gender: "L", parentId: 31, spouse: "", domicile: "Semarang", phone: "-", birthDate: "2002-07-07", deathDate: null, photo: "", spousePhoto: "", spouseIsAlive: true, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "" },
-  { id: 321, name: "Nisa Aisyah", isAlive: true, gender: "P", parentId: 32, spouse: "Hasan", domicile: "Yogyakarta", phone: "-", birthDate: "1999-08-08", deathDate: null, photo: "", spousePhoto: "", spouseIsAlive: true, spouseDomicile: "Yogyakarta", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "" },
-  { id: 3211, name: "Omar (Cicit)", isAlive: true, gender: "L", parentId: 321, spouse: "", domicile: "Yogyakarta", phone: "-", birthDate: "2024-05-20", deathDate: null, photo: "", spousePhoto: "", spouseIsAlive: true, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "" },
+const rawInitialMembers: Member[] = [
+  { id: 1, name: "Mbah KH. Sumadi", isAlive: false, gender: "L", parentId: null, spouse: "", domicile: "Pondok Pesantren", phone: "-", birthDate: "1935-01-01", deathDate: "2005-05-10", photo: "", spousePhoto: "", spouseIsAlive: false, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "" },
+  { id: 2, name: "Mbah Masripah (Istri 1)", isAlive: false, gender: "P", parentId: null, relationType: 'spouse', spouseOfId: 1, spouse: "", domicile: "Pondok Pesantren", phone: "-", birthDate: "1938-03-12", deathDate: "2010-08-20", photo: "", spousePhoto: "", spouseIsAlive: false, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "", branch: "istri1" },
+  { id: 3, name: "Mbah Munasikah (Istri 2)", isAlive: false, gender: "P", parentId: null, relationType: 'spouse', spouseOfId: 1, spouse: "", domicile: "Pondok Pesantren", phone: "-", birthDate: "1942-07-22", deathDate: "2015-11-05", photo: "", spousePhoto: "", spouseIsAlive: false, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "", branch: "istri2" }
 ];
+
+const initialMembers: Member[] = rawInitialMembers.map((m, idx) => ({ ...m, order: idx }));
 
 const initialAgendas: Agenda[] = [
   { id: 1, date: "2026-06-15", title: "Arisan Keluarga", location: "Rumah Pak Budi, Jakarta", desc: "Membahas persiapan Idul Adha" },
@@ -307,7 +362,15 @@ export default function BaniSumadiApp() {
 
     const unsubscribes = [
       onSnapshot(getColRef('members'), 
-        snap => setMembers(snap.docs.map(d => ({...d.data(), id: Number(d.id)} as Member))),
+        snap => {
+          const list = snap.docs.map(d => ({...d.data(), id: Number(d.id)} as Member));
+          list.sort((a, b) => {
+            const ordA = typeof a.order === 'number' ? a.order : a.id;
+            const ordB = typeof b.order === 'number' ? b.order : b.id;
+            return ordA - ordB;
+          });
+          setMembers(list);
+        },
         err => handleFirestoreError(err, OperationType.GET, 'members')
       ),
       onSnapshot(getColRef('agendas'), 
@@ -419,7 +482,7 @@ export default function BaniSumadiApp() {
         <main className="flex-1 overflow-y-auto relative bg-gray-50">
           <div className="p-4 h-full">
              {activeTab === 'dash' && <DashboardTab members={members} totalKas={totalKas} nextAgenda={nextAgenda} formatRupiah={formatRupiah} sliderImages={sliderImages} isAdmin={authRole === 'admin'} showToast={showToast} />}
-             {activeTab === 'pohon' && <PohonSilsilahTab members={members} />}
+             {activeTab === 'pohon' && <PohonSilsilahTab members={members} showToast={showToast} />}
              {activeTab === 'anggota' && <AnggotaTab members={members} isAdmin={authRole === 'admin'} showToast={showToast} />}
              {activeTab === 'agenda' && <AgendaTab agendas={agendas} isAdmin={authRole === 'admin'} showToast={showToast} />}
              {activeTab === 'kas' && <KasTab transactions={transactions} totalKas={totalKas} formatRupiah={formatRupiah} isAdmin={authRole === 'admin'} showToast={showToast} />}
@@ -851,6 +914,8 @@ function PersonBox({
   isAlive, 
   photo, 
   label, 
+  isRootAncestor = false,
+  badgeColor,
   onClick 
 }: { 
   name: string; 
@@ -858,9 +923,45 @@ function PersonBox({
   isAlive: boolean; 
   photo?: string; 
   label?: string; 
+  isRootAncestor?: boolean;
+  badgeColor?: string;
   onClick: (e: React.MouseEvent) => void; 
 }) {
   const isMale = gender === 'L';
+
+  if (isRootAncestor) {
+    return (
+      <div 
+        className="relative flex flex-col items-center cursor-pointer p-3 rounded-2xl shadow-xl transition-all duration-200 hover:scale-105 hover:shadow-2xl w-[114px] sm:w-[124px] select-none border-2 border-amber-400 bg-gradient-to-b from-amber-50/95 via-emerald-50/90 to-white text-emerald-950 ring-2 ring-amber-400/50 flex-shrink-0 backdrop-blur-sm"
+        onClick={onClick}
+        title={`Klik untuk melihat detail profil ${name} (Pemuncak Silsilah)`}
+      >
+        <span className="text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full mb-1 border border-amber-400 bg-gradient-to-r from-amber-500 to-emerald-600 text-white shadow-xs">
+          👑 Pemuncak Silsilah
+        </span>
+
+        <div className="relative mb-1">
+          {!isAlive && (
+            <span className="absolute -top-1 -right-1 bg-gray-800 text-amber-300 text-[7.5px] font-black px-1.5 py-0.2 rounded-md shadow-xs z-20 border border-gray-600">
+              ALM
+            </span>
+          )}
+          <div className="w-14 h-14 rounded-full flex items-center justify-center border-2 border-amber-400 bg-amber-100/70 text-amber-700 shadow-md overflow-hidden flex-shrink-0 ring-2 ring-amber-300/40">
+            {photo ? (
+              <img src={photo} className="w-full h-full object-cover" alt={name} />
+            ) : (
+              <Users size={26} className="text-amber-800" />
+            )}
+          </div>
+        </div>
+
+        <p className="font-black text-xs text-center leading-tight line-clamp-2 w-full break-words text-emerald-950">
+          {name}
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div 
       className={`relative flex flex-col items-center cursor-pointer p-2.5 rounded-2xl shadow-md transition-all duration-150 hover:scale-105 hover:shadow-xl w-[92px] sm:w-[98px] select-none border-2 flex-shrink-0 backdrop-blur-sm ${
@@ -874,9 +975,7 @@ function PersonBox({
       {/* Label / Badge (e.g. Kepala Keluarga, Istri 1, Suami, dll.) */}
       {label && (
         <span className={`text-[7.5px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-full mb-1 border ${
-          isMale 
-            ? 'bg-blue-100 text-blue-800 border-blue-200' 
-            : 'bg-pink-100 text-pink-800 border-pink-200'
+          badgeColor || (isMale ? 'bg-blue-100 text-blue-800 border-blue-200' : 'bg-pink-100 text-pink-800 border-pink-200')
         }`}>
           {label}
         </span>
@@ -914,33 +1013,20 @@ function MarriageConnector({ label }: { label?: string }) {
   return (
     <div className="flex items-center justify-center relative px-1 sm:px-2 z-10 self-center select-none flex-shrink-0">
       {/* Garis Horizontal Sejajar */}
-      <div className="w-8 sm:w-12 h-[3.5px] bg-gradient-to-r from-emerald-500 via-amber-400 to-emerald-500 rounded-full shadow-sm"></div>
+      <div className="w-8 sm:w-12 h-[3px] bg-gradient-to-r from-emerald-500 via-amber-400 to-emerald-500 rounded-full shadow-xs"></div>
       
-      {/* Badge Ikon Cincin Pernikahan di tengah garis sejajar */}
-      <div className="absolute -top-3.5 flex flex-col items-center pointer-events-none">
-        <span 
-          className="bg-amber-100 text-amber-900 text-[10px] w-5 h-5 rounded-full border border-amber-300 shadow-sm flex items-center justify-center leading-none" 
-          title="Pasangan (Garis Sejajar)"
-        >
-          💍
-        </span>
-        {label && (
-          <span className="text-[7.5px] font-black text-amber-900 bg-amber-50/95 px-1 py-0.2 rounded border border-amber-200 mt-0.5 whitespace-nowrap shadow-2xs">
+      {label && (
+        <div className="absolute -top-3 flex flex-col items-center pointer-events-none">
+          <span className="text-[7.5px] font-black text-amber-950 bg-amber-100/95 px-1.5 py-0.2 rounded-full border border-amber-300 mt-0.5 whitespace-nowrap shadow-2xs">
             {label}
           </span>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function PohonSilsilahTab({ members }: { members: Member[] }) {
-  const treeData = useMemo(() => {
-    const buildTree = (parentId: number | null = null): TreeNodeData[] => 
-      members.filter(m => m.parentId === parentId).map(m => ({ ...m, children: buildTree(m.id) }));
-    return buildTree();
-  }, [members]);
-
+function PohonSilsilahTab({ members, showToast }: { members: Member[]; showToast?: (m: string, t?: 'success' | 'error') => void }) {
   const [zoom, setZoom] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [expandAll, setExpandAll] = useState(true);
@@ -948,161 +1034,486 @@ function PohonSilsilahTab({ members }: { members: Member[] }) {
 
   useEffect(() => { setZoom(1); setPosition({ x: 0, y: 0 }); }, []);
 
-  const handleProfileClick = (node: Member, isSpouse: boolean, spouseObj?: Spouse) => {
-      if (!isSpouse) {
-          const spouseNames = getMemberSpouses(node, members).map(s => s.name).filter(Boolean).join(', ');
-          setSelectedProfile({ 
-            name: node.name, 
-            isAlive: node.isAlive, 
-            gender: node.gender, 
-            photo: node.photo, 
-            birthDate: node.birthDate, 
-            deathDate: node.deathDate, 
-            domicile: node.domicile, 
-            phone: node.phone, 
-            spouse: spouseNames || '-', 
-            parentName: members.find(m => m.id === node.parentId)?.name || '-' 
-          });
-      } else if (spouseObj) {
-          setSelectedProfile({ 
-            name: spouseObj.name, 
-            isAlive: spouseObj.isAlive, 
-            gender: node.gender === 'L' ? 'P' : 'L', 
-            photo: spouseObj.photo || '', 
-            birthDate: spouseObj.birthDate || '', 
-            deathDate: spouseObj.deathDate || '', 
-            domicile: spouseObj.domicile || '', 
-            phone: spouseObj.phone || '', 
-            spouse: node.name, 
-            parentName: '-' 
-          });
-      } else {
-          setSelectedProfile({ 
-            name: node.spouse || '', 
-            isAlive: node.spouseIsAlive ?? true, 
-            gender: node.gender === 'L' ? 'P' : 'L', 
-            photo: node.spousePhoto || '', 
-            birthDate: node.spouseBirthDate || '', 
-            deathDate: node.spouseDeathDate || '', 
-            domicile: node.spouseDomicile || '', 
-            phone: node.spousePhone || '', 
-            spouse: node.name, 
-            parentName: '-' 
-          });
+  // 1. Deteksi Pemuncak Silsilah (Mbah Sumadi)
+  const sumadi = useMemo(() => {
+    return members.find(m => m.id === 1) || 
+           members.find(m => (!m.parentId && m.name.toLowerCase().includes('sumadi'))) || 
+           members.find(m => !m.parentId && m.relationType !== 'spouse') ||
+           members[0];
+  }, [members]);
+
+  // 2. Deteksi Kedua Istri Mbah Sumadi
+  const wife1 = useMemo(() => {
+    return members.find(m => m.id === 2) || 
+           members.find(m => m.spouseOfId === 1 && (m.name.toLowerCase().includes('masripah') || m.name.toLowerCase().includes('aminah') || m.name.toLowerCase().includes('istri 1') || m.branch === 'istri1')) ||
+           members.find(m => m.name.toLowerCase().includes('masripah') || m.name.toLowerCase().includes('aminah') || m.name.toLowerCase().includes('istri 1'));
+  }, [members]);
+
+  const wife2 = useMemo(() => {
+    return members.find(m => m.id === 3) || 
+           members.find(m => m.spouseOfId === 1 && (m.name.toLowerCase().includes('munasikah') || m.name.toLowerCase().includes('yanti') || m.name.toLowerCase().includes('istri 2') || m.branch === 'istri2')) ||
+           members.find(m => m.name.toLowerCase().includes('munasikah') || m.name.toLowerCase().includes('yanti') || m.name.toLowerCase().includes('istri 2'));
+  }, [members]);
+
+  // 3. Sub-tree Builder untuk Keturunan Masing-Masing Istri
+  const buildChildrenTree = (targetParentId: number, isWifeBranch?: 1 | 2): TreeNodeData[] => {
+    return members
+      .filter(m => {
+        // Pasangan terikat secara horizontal di samping anggotanya, tidak sebagai anak di pohon
+        if (m.relationType === 'spouse') return false;
+        // Mbah Sumadi, Istri 1, dan Istri 2 bukan anak
+        if (m.id === 1 || m.id === 2 || m.id === 3) return false;
+
+        if (isWifeBranch === 1) {
+          if (m.parentId === (wife1?.id ?? 2)) return true;
+          if (m.parentId === 1 && (m.motherId === (wife1?.id ?? 2) || m.branch === 'istri1')) return true;
+          return false;
+        }
+
+        if (isWifeBranch === 2) {
+          if (m.parentId === (wife2?.id ?? 3)) return true;
+          if (m.parentId === 1 && (m.motherId === (wife2?.id ?? 3) || m.branch === 'istri2')) return true;
+          return false;
+        }
+
+        return m.parentId === targetParentId;
+      })
+      .map(m => ({
+        ...m,
+        children: buildChildrenTree(m.id)
+      }));
+  };
+
+  const wife1Children = useMemo(() => {
+    return wife1 ? buildChildrenTree(wife1.id, 1) : [];
+  }, [members, wife1]);
+
+  const wife2Children = useMemo(() => {
+    return wife2 ? buildChildrenTree(wife2.id, 2) : [];
+  }, [members, wife2]);
+
+  // Hitung total anggota keturunan pada masing-masing cabang
+  const countDescendantsBranch = (childrenList: TreeNodeData[]): number => {
+    let count = 0;
+    const visit = (node: TreeNodeData) => {
+      count++;
+      if (node.children && node.children.length > 0) {
+        node.children.forEach(visit);
       }
+    };
+    childrenList.forEach(visit);
+    return count;
+  };
+
+  const getParentLabel = (node: Member, isSpouse: boolean): string => {
+    if (isSpouse) return '-';
+    if (node.id === 1) return 'Pemuncak Silsilah (Akar Utama)';
+    if (node.id === 2 || node.id === 3) return '-';
+    if (node.parentId === (wife1?.id ?? 2) || (node.parentId === 1 && (node.motherId === (wife1?.id ?? 2) || node.branch === 'istri1'))) {
+      return `Mbah KH. Sumadi & ${wife1 ? wife1.name : 'Mbah Masripah (Istri 1)'}`;
+    }
+    if (node.parentId === (wife2?.id ?? 3) || (node.parentId === 1 && (node.motherId === (wife2?.id ?? 3) || node.branch === 'istri2'))) {
+      return `Mbah KH. Sumadi & ${wife2 ? wife2.name : 'Mbah Munasikah (Istri 2)'}`;
+    }
+    const parent = members.find(m => m.id === node.parentId);
+    if (!parent) return '-';
+    if (node.parentSpouseName) {
+      return `${parent.name} & ${node.parentSpouseName}`;
+    }
+    const pSpouses = getMemberSpouses(parent, members);
+    if (node.spouseIndex !== undefined && node.spouseIndex !== null && pSpouses[node.spouseIndex]) {
+      return `${parent.name} & ${pSpouses[node.spouseIndex].name}`;
+    }
+    if (pSpouses.length > 0) {
+      return `${parent.name} & ${pSpouses[0].name}`;
+    }
+    const spouse = members.find(s => s.id === parent.spouseOfId || (s.parentId === parent.id && s.relationType === 'spouse')) || (parent.spouse ? { name: parent.spouse } : null);
+    return spouse ? `${parent.name} & ${spouse.name}` : parent.name;
+  };
+
+  const handleProfileClick = (node: Member, isSpouse: boolean, spouseObj?: Spouse) => {
+    if (!isSpouse) {
+      const spouseNames = getMemberSpouses(node, members).map(s => s.name).filter(Boolean).join(', ');
+      setSelectedProfile({ 
+        name: node.name, 
+        isAlive: node.isAlive, 
+        gender: node.gender, 
+        photo: node.photo, 
+        birthDate: node.birthDate, 
+        deathDate: node.deathDate, 
+        domicile: node.domicile, 
+        phone: node.phone, 
+        spouse: spouseNames || '-', 
+        parentName: getParentLabel(node, false)
+      });
+    } else if (spouseObj) {
+      setSelectedProfile({ 
+        name: spouseObj.name, 
+        isAlive: spouseObj.isAlive, 
+        gender: node.gender === 'L' ? 'P' : 'L', 
+        photo: spouseObj.photo || '', 
+        birthDate: spouseObj.birthDate || '', 
+        deathDate: spouseObj.deathDate || '', 
+        domicile: spouseObj.domicile || '', 
+        phone: spouseObj.phone || '', 
+        spouse: node.name, 
+        parentName: '-' 
+      });
+    } else {
+      setSelectedProfile({ 
+        name: node.spouse || '', 
+        isAlive: node.spouseIsAlive ?? true, 
+        gender: node.gender === 'L' ? 'P' : 'L', 
+        photo: node.spousePhoto || '', 
+        birthDate: node.spouseBirthDate || '', 
+        deathDate: node.spouseDeathDate || '', 
+        domicile: node.spouseDomicile || '', 
+        phone: node.spousePhone || '', 
+        spouse: node.name, 
+        parentName: '-' 
+      });
+    }
   };
 
   return (
     <div className="flex flex-col h-[75vh] relative rounded-2xl overflow-hidden shadow-sm border border-gray-200 bg-[#1A4331] -mx-4 -mt-4">
       
-      {/* HEADER & LEGENDA ATURAN GARIS SILSILAH */}
-      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-1 pointer-events-none w-[92%] max-w-sm">
-        <div className="bg-white/95 backdrop-blur px-5 py-1.5 rounded-full shadow-lg text-center border border-emerald-100">
-          <h2 className="text-xs sm:text-sm font-black text-emerald-900 tracking-wide">Pohon Silsilah Keluarga</h2>
-        </div>
-        <div className="bg-emerald-950/85 backdrop-blur px-3.5 py-1 rounded-full shadow-md flex items-center justify-center gap-2 sm:gap-3 text-[9px] font-bold text-white border border-emerald-700/60 text-center">
-          <span className="flex items-center gap-1 text-amber-300">
-            <span className="w-3.5 h-[2.5px] bg-amber-400 inline-block rounded-full"></span>
-            <span>Garis Sejajar = Pasangan 💍 (1 Pasangan: Kiri-Kanan | &gt;1: Istri 2 di Kiri, Utama di Tengah, Istri 1 di Kanan)</span>
-          </span>
-          <span className="text-emerald-500">|</span>
-          <span className="flex items-center gap-1 text-emerald-200">
-            <span className="w-[2.5px] h-3 bg-emerald-400 inline-block rounded-full"></span>
-            <span>Garis ke Bawah = Keturunan</span>
-          </span>
+      {/* HEADER JUDUL BAGAN SILSILAH */}
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center pointer-events-none w-[94%] max-w-lg">
+        <div className="bg-white/95 backdrop-blur px-5 py-1.5 rounded-full shadow-lg text-center border border-emerald-100 flex items-center gap-2">
+          <h2 className="text-xs sm:text-sm font-black text-emerald-950 tracking-wide flex items-center justify-center gap-1.5">
+            <span>👑</span>
+            <span>Bagan Silsilah Mbah KH. Sumadi</span>
+          </h2>
         </div>
       </div>
 
       {/* KONTROL ZOOM & VIEW */}
-      <div className="absolute left-4 top-20 flex flex-col gap-3 z-10">
-        <button onClick={() => setZoom(z => Math.min(z + 0.2, 2.5))} className="w-12 h-12 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 rounded-full text-white shadow-lg flex items-center justify-center transition active:scale-95 cursor-pointer" title="Zoom In"><Plus size={22}/></button>
-        <button onClick={() => setZoom(z => Math.max(z - 0.2, 0.3))} className="w-12 h-12 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 rounded-full text-white shadow-lg flex items-center justify-center transition active:scale-95 cursor-pointer" title="Zoom Out"><Minus size={22}/></button>
-        <button onClick={() => { setZoom(1); setPosition({x:0, y:0}); }} className="w-12 h-12 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 rounded-full text-white shadow-lg flex items-center justify-center transition active:scale-95 cursor-pointer" title="Reset View"><Maximize size={20}/></button>
-        <button onClick={() => setExpandAll(!expandAll)} className={`w-12 h-12 backdrop-blur-md border rounded-full shadow-lg flex items-center justify-center transition active:scale-95 cursor-pointer ${expandAll ? 'bg-emerald-500/80 border-emerald-400 text-white' : 'bg-white/10 border-white/20 text-white hover:bg-white/20'}`} title="Buka/Tutup Cabang"><Network size={20}/></button>
+      <div className="absolute left-4 top-14 flex flex-col gap-2.5 z-10">
+        <button onClick={() => setZoom(z => Math.min(z + 0.2, 2.5))} className="w-10 h-10 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 rounded-full text-white shadow-lg flex items-center justify-center transition active:scale-95 cursor-pointer" title="Zoom In"><Plus size={18}/></button>
+        <button onClick={() => setZoom(z => Math.max(z - 0.2, 0.3))} className="w-10 h-10 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 rounded-full text-white shadow-lg flex items-center justify-center transition active:scale-95 cursor-pointer" title="Zoom Out"><Minus size={18}/></button>
+        <button onClick={() => { setZoom(1); setPosition({x:0, y:0}); }} className="w-10 h-10 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 rounded-full text-white shadow-lg flex items-center justify-center transition active:scale-95 cursor-pointer" title="Reset View"><Maximize size={16}/></button>
+        <button onClick={() => setExpandAll(!expandAll)} className={`w-10 h-10 backdrop-blur-md border rounded-full shadow-lg flex items-center justify-center transition active:scale-95 cursor-pointer ${expandAll ? 'bg-emerald-500/80 border-emerald-400 text-white' : 'bg-white/10 border-white/20 text-white hover:bg-white/20'}`} title="Buka/Tutup Cabang"><Network size={16}/></button>
       </div>
 
       <PanZoomWrapper zoom={zoom} setZoom={setZoom} position={position} setPosition={setPosition}>
-         {treeData.map(node => {
-            // DETEKSI LOGIKA SPESIAL: Puncak Root (Mbah Sumadi, Istri 1 & Istri 2)
-            // Sesuai aturan: Anggota utama di TENGAH, Istri kedua di KIRI, Istri pertama di KANAN
-            if (!node.parentId && node.children && node.children.length >= 2) {
-               const wife1 = node.children[0]; // Mbah Aminah (Istri 1)
-               const wife2 = node.children[1]; // Mbah Yanti (Istri 2)
-
-               return (
-                 <div key={node.id} className="relative flex justify-center items-start">
-                    
-                    {/* CABANG ISTRI 2 (KIRI) - Keturunan Istri 2 Turun ke Bawah */}
-                    <div className="relative flex flex-col items-center">
-                        <TreeNode 
-                          node={wife2} 
-                          members={members}
-                          onOpenProfile={handleProfileClick} 
-                          isRoot={true} 
-                          globalExpandAll={expandAll} 
-                          hideSpouse={true} 
-                          customLabel="Istri 2" 
+        {sumadi ? (
+          <div className="relative flex flex-col items-center">
+            
+            {/* TAMPILAN SEMUA CABANG: ISTRI 2 (KIRI) ━━ MBAH SUMADI (TENGAH) ━━ ISTRI 1 (KANAN) */}
+            <div className="relative flex justify-center items-start pt-2">
+                
+                {/* CABANG KIRI: KETURUNAN PERNIKAHAN MBAH MUNASIKAH & MBAH KH. SUMADI */}
+                <div className="relative flex flex-col items-center">
+                  
+                  {/* BARIS SEJAJAR ATAS KIRI: KARTU MBAH MUNASIKAH + GARIS PERNIKAHAN MENUJU TENGAH */}
+                  <div className="relative flex items-center justify-end w-full">
+                    {/* Kartu Mbah Munasikah (Istri Kedua di Kiri) */}
+                    <div className="flex-shrink-0 z-20">
+                      {wife2 ? (
+                        <PersonBox
+                          name={wife2.name}
+                          gender={wife2.gender}
+                          isAlive={wife2.isAlive}
+                          photo={wife2.photo}
+                          onClick={(e) => { e.stopPropagation(); handleProfileClick(wife2, false); }}
                         />
+                      ) : (
+                        <div className="p-3 bg-purple-900/60 rounded-2xl text-white text-xs">Mbah Munasikah</div>
+                      )}
                     </div>
 
-                    {/* GARIS SEJAJAR: ISTRI 2 KE KH. SUMADI */}
-                    <div className="self-start mt-8 sm:mt-10 flex items-center justify-center px-1">
-                        <div className="w-6 sm:w-12 h-[3.5px] bg-gradient-to-r from-emerald-400 via-amber-400 to-emerald-400 rounded-full"></div>
-                        <span className="bg-amber-100 text-amber-900 text-[10px] w-5 h-5 rounded-full border border-amber-300 shadow-sm flex items-center justify-center mx-1">💍</span>
-                        <div className="w-6 sm:w-12 h-[3.5px] bg-gradient-to-r from-amber-400 to-emerald-400 rounded-full"></div>
+                    {/* Garis Horizontal Pernikahan Menghubungkan Mbah Munasikah & Mbah Sumadi */}
+                    <div className="flex-1 min-w-[110px] sm:min-w-[150px] h-[3.5px] bg-gradient-to-r from-purple-400 via-amber-400 to-emerald-400 self-center relative flex items-center justify-center">
+                    </div>
+                  </div>
+
+                  {/* GARIS TURUN VERTICAL DARI TITIK TENGAH PERNIKAHAN MENUJU KETURUNAN */}
+                  <div className="relative flex flex-col items-center w-full mt-0">
+                    {/* Batang Garis Vertikal Turun Tepat dari Titik Pernikahan */}
+                    <div className="w-[3px] h-8 bg-purple-400 shadow-xs"></div>
+
+                    {/* Banner Silsilah Keturunan Mbah Munasikah */}
+                    <div className="mb-3 px-3 py-1 rounded-xl bg-purple-950/90 border border-purple-500/70 shadow-sm text-center">
+                      <p className="text-[10px] font-black text-purple-200 uppercase tracking-wide">
+                        Keturunan Mbah Munasikah & Mbah KH. Sumadi
+                      </p>
+                      <p className="text-[8px] font-bold text-purple-300/80">
+                        {countDescendantsBranch(wife2Children)} Anggota Keturunan (Anak & Cucu)
+                      </p>
                     </div>
 
-                    {/* KH. SUMADI (TENGAH) - SEJAJAR DENGAN KEDUA ISTRI */}
-                    <div className="relative flex flex-col items-center z-10 px-2 sm:px-4">
-                        <PersonBox 
-                           name={node.name} 
-                           gender={node.gender} 
-                           isAlive={node.isAlive} 
-                           photo={node.photo} 
-                           label="Kepala Keluarga"
-                           onClick={(e) => { e.stopPropagation(); handleProfileClick(node, false); }} 
+                    {/* Deretan Anak-anak & Cucu-cucu */}
+                    {wife2Children.length > 0 ? (
+                      <div className="flex justify-center items-start">
+                        {wife2Children.map((child, idx) => {
+                          const isFirst = idx === 0;
+                          const isLast = idx === wife2Children.length - 1;
+                          const isOnly = wife2Children.length === 1;
+
+                          return (
+                            <div key={child.id} className="relative flex flex-col items-center px-2 sm:px-4">
+                              {!isOnly && (
+                                <>
+                                  {isFirst && <div className="absolute top-0 right-0 w-1/2 h-[2.5px] bg-purple-400"></div>}
+                                  {isLast && <div className="absolute top-0 left-0 w-1/2 h-[2.5px] bg-purple-400"></div>}
+                                  {!isFirst && !isLast && <div className="absolute top-0 left-0 w-full h-[2.5px] bg-purple-400"></div>}
+                                </>
+                              )}
+                              <TreeNode
+                                node={child}
+                                members={members}
+                                onOpenProfile={handleProfileClick}
+                                isRoot={false}
+                                globalExpandAll={expandAll}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-[9px] text-purple-300/60 mt-1 font-medium italic">Belum ada data anak/cucu</p>
+                    )}
+                  </div>
+
+                </div>
+
+                {/* TENGAH: MBAH KH. SUMADI (PEMUNCAK SILSILAH) */}
+                <div className="relative flex flex-col items-center z-30 px-0 flex-shrink-0">
+                  <PersonBox
+                    name={sumadi.name}
+                    gender={sumadi.gender}
+                    isAlive={sumadi.isAlive}
+                    photo={sumadi.photo}
+                    isRootAncestor={true}
+                    onClick={(e) => { e.stopPropagation(); handleProfileClick(sumadi, false); }}
+                  />
+                </div>
+
+                {/* CABANG KANAN: KETURUNAN PERNIKAHAN MBAH MASRIPAH & MBAH KH. SUMADI */}
+                <div className="relative flex flex-col items-center">
+                  
+                  {/* BARIS SEJAJAR ATAS KANAN: GARIS PERNIKAHAN + KARTU MBAH MASRIPAH */}
+                  <div className="relative flex items-center justify-start w-full">
+                    {/* Garis Horizontal Pernikahan Menghubungkan Mbah Sumadi & Mbah Masripah */}
+                    <div className="flex-1 min-w-[110px] sm:min-w-[150px] h-[3.5px] bg-gradient-to-r from-emerald-400 via-amber-400 to-pink-400 self-center relative flex items-center justify-center">
+                    </div>
+
+                    {/* Kartu Mbah Masripah (Istri Pertama di Kanan) */}
+                    <div className="flex-shrink-0 z-20">
+                      {wife1 ? (
+                        <PersonBox
+                          name={wife1.name}
+                          gender={wife1.gender}
+                          isAlive={wife1.isAlive}
+                          photo={wife1.photo}
+                          onClick={(e) => { e.stopPropagation(); handleProfileClick(wife1, false); }}
                         />
+                      ) : (
+                        <div className="p-3 bg-pink-900/60 rounded-2xl text-white text-xs">Mbah Masripah</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* GARIS TURUN VERTICAL DARI TITIK TENGAH PERNIKAHAN MENUJU KETURUNAN */}
+                  <div className="relative flex flex-col items-center w-full mt-0">
+                    {/* Batang Garis Vertikal Turun Tepat dari Titik Pernikahan */}
+                    <div className="w-[3px] h-8 bg-pink-400 shadow-xs"></div>
+
+                    {/* Banner Silsilah Keturunan Mbah Masripah */}
+                    <div className="mb-3 px-3 py-1 rounded-xl bg-pink-950/90 border border-pink-500/70 shadow-sm text-center">
+                      <p className="text-[10px] font-black text-pink-200 uppercase tracking-wide">
+                        Keturunan Mbah Masripah & Mbah KH. Sumadi
+                      </p>
+                      <p className="text-[8px] font-bold text-pink-300/80">
+                        {countDescendantsBranch(wife1Children)} Anggota Keturunan (Anak & Cucu)
+                      </p>
                     </div>
 
-                    {/* GARIS SEJAJAR: KH. SUMADI KE ISTRI 1 */}
-                    <div className="self-start mt-8 sm:mt-10 flex items-center justify-center px-1">
-                        <div className="w-6 sm:w-12 h-[3.5px] bg-gradient-to-r from-emerald-400 via-amber-400 to-emerald-400 rounded-full"></div>
-                        <span className="bg-amber-100 text-amber-900 text-[10px] w-5 h-5 rounded-full border border-amber-300 shadow-sm flex items-center justify-center mx-1">💍</span>
-                        <div className="w-6 sm:w-12 h-[3.5px] bg-gradient-to-r from-amber-400 to-emerald-400 rounded-full"></div>
-                    </div>
+                    {/* Deretan Anak-anak & Cucu-cucu */}
+                    {wife1Children.length > 0 ? (
+                      <div className="flex justify-center items-start">
+                        {wife1Children.map((child, idx) => {
+                          const isFirst = idx === 0;
+                          const isLast = idx === wife1Children.length - 1;
+                          const isOnly = wife1Children.length === 1;
 
-                    {/* CABANG ISTRI 1 (KANAN) - Keturunan Istri 1 Turun ke Bawah */}
-                    <div className="relative flex flex-col items-center">
-                        <TreeNode 
-                          node={wife1} 
-                          members={members}
-                          onOpenProfile={handleProfileClick} 
-                          isRoot={true} 
-                          globalExpandAll={expandAll} 
-                          hideSpouse={true} 
-                          customLabel="Istri 1" 
-                        />
-                    </div>
-                 </div>
-               );
-            }
+                          return (
+                            <div key={child.id} className="relative flex flex-col items-center px-2 sm:px-4">
+                              {!isOnly && (
+                                <>
+                                  {isFirst && <div className="absolute top-0 right-0 w-1/2 h-[2.5px] bg-pink-400"></div>}
+                                  {isLast && <div className="absolute top-0 left-0 w-1/2 h-[2.5px] bg-pink-400"></div>}
+                                  {!isFirst && !isLast && <div className="absolute top-0 left-0 w-full h-[2.5px] bg-pink-400"></div>}
+                                </>
+                              )}
+                              <TreeNode
+                                node={child}
+                                members={members}
+                                onOpenProfile={handleProfileClick}
+                                isRoot={false}
+                                globalExpandAll={expandAll}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-[9px] text-pink-300/60 mt-1 font-medium italic">Belum ada data anak/cucu</p>
+                    )}
+                  </div>
 
-            // Fallback node biasa
-            return (
-              <TreeNode 
-                key={node.id} 
-                node={node} 
-                members={members}
-                onOpenProfile={handleProfileClick} 
-                isRoot={true} 
-                globalExpandAll={expandAll} 
-              />
-            );
-         })}
-         {treeData.length === 0 && <p className="text-white/50 font-medium mt-10">Belum ada struktur silsilah.</p>}
+                </div>
+
+              </div>
+
+            </div>
+        ) : (
+          <p className="text-white/50 font-medium mt-10">Belum ada struktur silsilah.</p>
+        )}
       </PanZoomWrapper>
 
       {selectedProfile && <ProfilePopupCard profile={selectedProfile} onClose={() => setSelectedProfile(null)} />}
+    </div>
+  );
+}
+
+function CoupleCard({
+  member,
+  spouse,
+  label,
+  badgeColor,
+  onOpenProfile,
+  hasChildren,
+  isExpanded,
+  onToggleExpand,
+}: {
+  member: Member;
+  spouse: Spouse;
+  label?: string;
+  badgeColor?: string;
+  onOpenProfile: (m: Member, isSpouse: boolean, spouseObj?: Spouse) => void;
+  hasChildren?: boolean;
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
+}) {
+  const isPrimaryMale = member.gender === 'L';
+  const spouseIsMale = !isPrimaryMale;
+
+  return (
+    <div className="relative flex flex-col items-center select-none flex-shrink-0">
+      {/* KARTU GABUNGAN PASANGAN (SATU CARD) */}
+      <div className="relative flex flex-col items-center p-2 sm:p-2.5 rounded-2xl shadow-md border-2 border-emerald-400/80 bg-gradient-to-b from-emerald-50/70 via-white to-white text-emerald-950 transition-all duration-150 hover:shadow-xl hover:border-emerald-500 backdrop-blur-sm">
+        
+        {/* Label Atas Kartu (e.g. Istri Pertama, Istri Kedua, Pasangan) */}
+        {label && (
+          <span className={`text-[7.5px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full mb-1.5 border shadow-2xs ${
+            badgeColor || 'bg-emerald-100 text-emerald-900 border-emerald-300'
+          }`}>
+            {label}
+          </span>
+        )}
+
+        {/* Baris Dua Orang dalam Satu Card */}
+        <div className="flex items-center gap-2">
+          
+          {/* SISI ANGGOTA UTAMA */}
+          <div 
+            onClick={(e) => { e.stopPropagation(); onOpenProfile(member, false); }}
+            className={`flex flex-col items-center p-1.5 rounded-xl cursor-pointer transition hover:bg-emerald-100/50 w-[84px] sm:w-[92px] ${
+              isPrimaryMale ? 'text-blue-950' : 'text-pink-950'
+            }`}
+            title={`Klik untuk melihat detail profil ${member.name}`}
+          >
+            <div className="relative mb-1">
+              {!member.isAlive && (
+                <span className="absolute -top-1 -right-1 bg-gray-700 text-white text-[7px] font-black px-1 py-0.2 rounded-md shadow-xs z-20">
+                  ALM
+                </span>
+              )}
+              <div className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full flex items-center justify-center border-2 shadow-sm overflow-hidden flex-shrink-0 ${
+                isPrimaryMale 
+                  ? 'bg-blue-100/70 text-blue-600 border-blue-300' 
+                  : 'bg-pink-100/70 text-pink-600 border-pink-300'
+              }`}>
+                {member.photo ? (
+                  <img src={member.photo} className="w-full h-full object-cover" alt={member.name} />
+                ) : (
+                  <Users size={18} />
+                )}
+              </div>
+            </div>
+
+            <p className="font-bold text-[10px] text-center leading-tight line-clamp-2 w-full break-words">
+              {member.name}
+            </p>
+            <span className={`text-[7px] font-black mt-0.5 px-1 py-0.2 rounded ${
+              isPrimaryMale ? 'bg-blue-50 text-blue-700' : 'bg-pink-50 text-pink-700'
+            }`}>
+              {isPrimaryMale ? 'Suami' : 'Istri'}
+            </span>
+          </div>
+
+          {/* PEMISAH ELEGAN ANTARA PASANGAN (TANPA SIMBOL CINCIN) */}
+          <div className="flex flex-col items-center justify-center px-0.5">
+            <div className="w-[1.5px] h-10 bg-emerald-200/90 rounded-full flex items-center justify-center relative">
+              <span className="absolute bg-emerald-100 text-emerald-800 text-[8.5px] font-black w-4 h-4 rounded-full border border-emerald-300 shadow-2xs flex items-center justify-center leading-none">
+                &
+              </span>
+            </div>
+          </div>
+
+          {/* SISI PASANGAN */}
+          <div 
+            onClick={(e) => { e.stopPropagation(); onOpenProfile(member, true, spouse); }}
+            className={`flex flex-col items-center p-1.5 rounded-xl cursor-pointer transition hover:bg-emerald-100/50 w-[84px] sm:w-[92px] ${
+              spouseIsMale ? 'text-blue-950' : 'text-pink-950'
+            }`}
+            title={`Klik untuk melihat detail profil ${spouse.name}`}
+          >
+            <div className="relative mb-1">
+              {!spouse.isAlive && (
+                <span className="absolute -top-1 -right-1 bg-gray-700 text-white text-[7px] font-black px-1 py-0.2 rounded-md shadow-xs z-20">
+                  ALM
+                </span>
+              )}
+              <div className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full flex items-center justify-center border-2 shadow-sm overflow-hidden flex-shrink-0 ${
+                spouseIsMale 
+                  ? 'bg-blue-100/70 text-blue-600 border-blue-300' 
+                  : 'bg-pink-100/70 text-pink-600 border-pink-300'
+              }`}>
+                {spouse.photo ? (
+                  <img src={spouse.photo} className="w-full h-full object-cover" alt={spouse.name} />
+                ) : (
+                  <Users size={18} />
+                )}
+              </div>
+            </div>
+
+            <p className="font-bold text-[10px] text-center leading-tight line-clamp-2 w-full break-words">
+              {spouse.name}
+            </p>
+            <span className={`text-[7px] font-black mt-0.5 px-1 py-0.2 rounded ${
+              spouseIsMale ? 'bg-blue-50 text-blue-700' : 'bg-pink-50 text-pink-700'
+            }`}>
+              {spouseIsMale ? 'Suami' : 'Istri'}
+            </span>
+          </div>
+
+        </div>
+
+        {/* Tombol Expand/Collapse jika ada anak */}
+        {hasChildren && onToggleExpand && (
+          <button 
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onToggleExpand(); }} 
+            className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-6 h-6 bg-emerald-600 border-2 border-white rounded-full shadow-md text-white flex items-center justify-center z-30 hover:bg-emerald-700 transition font-black active:scale-95 cursor-pointer"
+            title={isExpanded ? 'Sembunyikan Keturunan' : 'Tampilkan Keturunan'}
+          >
+            {isExpanded ? <Minus size={13} strokeWidth={3} /> : <Plus size={13} strokeWidth={3} />}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -1125,10 +1536,32 @@ function TreeNode({
   customLabel?: string;
 }) {
   const [isExpanded, setIsExpanded] = useState(true);
-  const hasChildren = node.children && node.children.length > 0;
   const spouses = getMemberSpouses(node, members);
 
   useEffect(() => { setIsExpanded(globalExpandAll); }, [globalExpandAll]);
+
+  // Helper untuk memisahkan anak berdasarkan pasangan
+  const getChildrenForSpouse = (sp: Spouse, spIdx: number) => {
+    if (!node.children || node.children.length === 0) return [];
+    return node.children.filter(child => {
+      if (child.parentSpouseName && sp.name) {
+        if (child.parentSpouseName.trim().toLowerCase() === sp.name.trim().toLowerCase()) return true;
+      }
+      if (child.spouseIndex !== undefined && child.spouseIndex !== null) {
+        return Number(child.spouseIndex) === spIdx;
+      }
+      if (child.motherId && (sp.id === child.motherId || Number(sp.id) === child.motherId)) {
+        return true;
+      }
+      // Jika belum ditentukan spesifik, default ke pasangan pertama
+      if (!child.parentSpouseName && (child.spouseIndex === undefined || child.spouseIndex === null)) {
+        return spIdx === 0;
+      }
+      return false;
+    });
+  };
+
+  const hasChildren = node.children && node.children.length > 0;
 
   return (
     <div className="flex flex-col items-center relative">
@@ -1138,11 +1571,10 @@ function TreeNode({
         <div className="w-[2.5px] h-6 bg-emerald-500 mb-0 flex-shrink-0"></div>
       )}
 
-      {/* UNIT PASANGAN (SEJAJAR HORIZONTAL) */}
-      <div className="relative flex items-center justify-center z-10">
-        
-        {hideSpouse || spouses.length === 0 ? (
-          // Tidak ada pasangan: Hanya Anggota Utama
+      {/* KONTEN KARTU ANGGOTA / PASANGAN */}
+      {spouses.length === 0 || hideSpouse ? (
+        // KASUS 1: BELUM MEMILIKI PASANGAN -> 1 KARTU TUNGGAL
+        <div className="relative flex flex-col items-center">
           <PersonBox 
             name={node.name} 
             gender={node.gender} 
@@ -1151,141 +1583,135 @@ function TreeNode({
             label={customLabel || (isRoot ? 'Puncak Silsilah' : undefined)}
             onClick={(e) => { e.stopPropagation(); onOpenProfile(node, false); }} 
           />
-        ) : spouses.length === 1 ? (
-          // ATURAN 1: HANYA 1 PASANGAN
-          // Anggota Utama di KIRI, Pasangan di KANAN
-          <>
-            <PersonBox 
-              name={node.name} 
-              gender={node.gender} 
-              isAlive={node.isAlive} 
-              photo={node.photo} 
-              label={customLabel || (isRoot ? 'Puncak Silsilah' : undefined)}
-              onClick={(e) => { e.stopPropagation(); onOpenProfile(node, false); }} 
-            />
 
-            <MarriageConnector label={node.gender === 'L' ? 'Istri' : 'Suami'} />
+          {hasChildren && (
+            <button 
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded); }} 
+              className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-6 h-6 bg-emerald-600 border-2 border-white rounded-full shadow-md text-white flex items-center justify-center z-30 hover:bg-emerald-700 transition font-black active:scale-95 cursor-pointer"
+              title={isExpanded ? 'Sembunyikan Keturunan' : 'Tampilkan Keturunan'}
+            >
+              {isExpanded ? <Minus size={13} strokeWidth={3} /> : <Plus size={13} strokeWidth={3} />}
+            </button>
+          )}
+        </div>
+      ) : spouses.length === 1 ? (
+        // KASUS 2: MEMILIKI 1 PASANGAN (CONTOH: MASLURI & YAH) -> DIJADIKAN SATU CARD!
+        <CoupleCard 
+          member={node}
+          spouse={spouses[0]}
+          label={customLabel}
+          onOpenProfile={onOpenProfile}
+          hasChildren={hasChildren}
+          isExpanded={isExpanded}
+          onToggleExpand={() => setIsExpanded(!isExpanded)}
+        />
+      ) : (
+        // KASUS 3: MEMILIKI LEBIH DARI 1 PASANGAN (MENIKAH LAGI / POLIGAMI, CONTOH: MASRURON)
+        // -> DIJADIKAN BEDA CARD: MASRURON & SRI DALAM SATU CARD, MASRURON & MAGHFIROH DALAM SATU CARD!
+        <div className="relative flex flex-col items-center">
+          {/* Garis Horizontal Penghubung di atas kedua kartu pasangan */}
+          {!isRoot && (
+            <div className="w-full flex justify-center mb-0 relative">
+              <div className="w-1/2 h-[2.5px] bg-emerald-500"></div>
+            </div>
+          )}
 
-            <PersonBox 
-              name={spouses[0].name} 
-              gender={node.gender === 'L' ? 'P' : 'L'} 
-              isAlive={spouses[0].isAlive} 
-              photo={spouses[0].photo} 
-              label={node.gender === 'L' ? 'Istri' : 'Suami'}
-              onClick={(e) => { e.stopPropagation(); onOpenProfile(node, true, spouses[0]); }} 
-            />
-          </>
-        ) : (
-          // ATURAN 2: LEBIH DARI 1 PASANGAN
-          // Anggota Utama di TENGAH, Istri Kedua di KIRI, Istri Pertama di KANAN
-          <>
-            {/* KIRI: Istri Kedua (spouses[1]) */}
-            {spouses[1] && (
-              <>
-                <PersonBox 
-                  name={spouses[1].name} 
-                  gender={node.gender === 'L' ? 'P' : 'L'} 
-                  isAlive={spouses[1].isAlive} 
-                  photo={spouses[1].photo} 
-                  label={node.gender === 'L' ? 'Istri 2' : 'Suami 2'}
-                  onClick={(e) => { e.stopPropagation(); onOpenProfile(node, true, spouses[1]); }} 
-                />
-                <MarriageConnector label={node.gender === 'L' ? 'Istri 2' : 'Suami 2'} />
-              </>
-            )}
+          <div className="flex items-start justify-center gap-4 sm:gap-6 relative">
+            {spouses.map((sp, idx) => {
+              const spouseChildren = getChildrenForSpouse(sp, idx);
+              const hasSpouseChildren = spouseChildren.length > 0;
+              const isFirst = idx === 0;
+              const spouseCardLabel = node.gender === 'L' 
+                ? (isFirst ? 'Istri Pertama (ke-1)' : `Istri Kedua (ke-${idx + 1})`)
+                : (isFirst ? 'Suami Pertama (ke-1)' : `Suami Kedua (ke-${idx + 1})`);
 
-            {/* TENGAH: Anggota Utama */}
-            <PersonBox 
-              name={node.name} 
-              gender={node.gender} 
-              isAlive={node.isAlive} 
-              photo={node.photo} 
-              label={customLabel || (isRoot ? 'Puncak Silsilah' : undefined)}
-              onClick={(e) => { e.stopPropagation(); onOpenProfile(node, false); }} 
-            />
-
-            {/* KANAN: Istri Pertama (spouses[0]) */}
-            {spouses[0] && (
-              <>
-                <MarriageConnector label={node.gender === 'L' ? 'Istri 1' : 'Suami 1'} />
-                <PersonBox 
-                  name={spouses[0].name} 
-                  gender={node.gender === 'L' ? 'P' : 'L'} 
-                  isAlive={spouses[0].isAlive} 
-                  photo={spouses[0].photo} 
-                  label={node.gender === 'L' ? 'Istri 1' : 'Suami 1'}
-                  onClick={(e) => { e.stopPropagation(); onOpenProfile(node, true, spouses[0]); }} 
-                />
-              </>
-            )}
-
-            {/* Jika ada istri ke-3, ke-4, dst */}
-            {spouses.slice(2).map((sp, idx) => {
-              const spouseNum = idx + 3;
-              const spouseLabel = node.gender === 'L' ? `Istri ${spouseNum}` : `Suami ${spouseNum}`;
               return (
-                <React.Fragment key={sp.id || idx}>
-                  <MarriageConnector label={spouseLabel} />
-                  <PersonBox 
-                    name={sp.name} 
-                    gender={node.gender === 'L' ? 'P' : 'L'} 
-                    isAlive={sp.isAlive} 
-                    photo={sp.photo} 
-                    label={spouseLabel}
-                    onClick={(e) => { e.stopPropagation(); onOpenProfile(node, true, sp); }} 
+                <div key={sp.id || idx} className="relative flex flex-col items-center">
+                  {/* Kartu Khusus Pernikahan Pasangan ini */}
+                  <CoupleCard 
+                    member={node}
+                    spouse={sp}
+                    label={spouseCardLabel}
+                    badgeColor={isFirst ? 'bg-pink-100 text-pink-900 border-pink-300' : 'bg-purple-100 text-purple-900 border-purple-300'}
+                    onOpenProfile={onOpenProfile}
+                    hasChildren={hasSpouseChildren}
+                    isExpanded={isExpanded}
+                    onToggleExpand={() => setIsExpanded(!isExpanded)}
                   />
-                </React.Fragment>
+
+                  {/* Keturunan Khusus dari Pasangan ini */}
+                  {hasSpouseChildren && isExpanded && (
+                    <div className="relative flex flex-col items-center mt-3 pt-4 w-full">
+                      <div className="absolute top-0 left-1/2 w-[2.5px] h-4 bg-emerald-500 -translate-x-1/2"></div>
+                      <div className="flex justify-center items-start">
+                        {spouseChildren.map((child, cIdx) => {
+                          const isChildFirst = cIdx === 0;
+                          const isChildLast = cIdx === spouseChildren.length - 1;
+                          const isChildOnly = spouseChildren.length === 1;
+
+                          return (
+                            <div key={child.id} className="relative flex flex-col items-center px-2 sm:px-4">
+                              {!isChildOnly && (
+                                <>
+                                  {isChildFirst && <div className="absolute top-0 right-0 w-1/2 h-[2.5px] bg-emerald-500"></div>}
+                                  {isChildLast && <div className="absolute top-0 left-0 w-1/2 h-[2.5px] bg-emerald-500"></div>}
+                                  {!isChildFirst && !isChildLast && <div className="absolute top-0 left-0 w-full h-[2.5px] bg-emerald-500"></div>}
+                                </>
+                              )}
+                              <TreeNode 
+                                node={child}
+                                members={members}
+                                onOpenProfile={onOpenProfile}
+                                isRoot={false}
+                                globalExpandAll={globalExpandAll}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
               );
             })}
-          </>
-        )}
+          </div>
+        </div>
+      )}
 
-        {/* Tombol Expand/Collapse Keturunan di bawah pasangan */}
-        {hasChildren && (
-          <button 
-            onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded); }} 
-            className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-6 h-6 bg-emerald-600 border-2 border-white rounded-full shadow-md text-white flex items-center justify-center z-30 hover:bg-emerald-700 transition font-black active:scale-95 cursor-pointer"
-            title={isExpanded ? 'Sembunyikan Keturunan' : 'Tampilkan Keturunan'}
-          >
-            {isExpanded ? <Minus size={13} strokeWidth={3} /> : <Plus size={13} strokeWidth={3} />}
-          </button>
-        )}
-      </div>
-
-      {/* GARIS KETURUNAN: KE BAWAH DARI PASANGAN KE ANAK-ANAK */}
-      {hasChildren && isExpanded && (
+      {/* GARIS KETURUNAN UNTUK KASUS 1 & 2 (SINGLE ATAU 1 PASANGAN) */}
+      {spouses.length <= 1 && hasChildren && isExpanded && (
         <div className="relative flex flex-col items-center mt-3 pt-4 w-full">
-           {/* Garis vertikal lurus ke bawah dari orang tua */}
-           <div className="absolute top-0 left-1/2 w-[2.5px] h-4 bg-emerald-500 -translate-x-1/2"></div>
-           
-           {/* Cabang horizontal menghubungkan anak-anak di bawahnya */}
-           <div className="flex justify-center items-start">
-             {node.children.map((child, index) => {
-                const isFirst = index === 0;
-                const isLast = index === node.children.length - 1;
-                const isOnly = node.children.length === 1;
+          {/* Garis vertikal lurus ke bawah dari kartu */}
+          <div className="absolute top-0 left-1/2 w-[2.5px] h-4 bg-emerald-500 -translate-x-1/2"></div>
+          
+          {/* Cabang horizontal menghubungkan anak-anak di bawahnya */}
+          <div className="flex justify-center items-start">
+            {node.children.map((child, index) => {
+              const isFirst = index === 0;
+              const isLast = index === node.children.length - 1;
+              const isOnly = node.children.length === 1;
 
-                return (
-                  <div key={child.id} className="relative flex flex-col items-center px-2 sm:px-4">
-                     {/* Garis pembagi horizontal di atas deretan anak */}
-                     {!isOnly && (
-                       <>
-                         {isFirst && <div className="absolute top-0 right-0 w-1/2 h-[2.5px] bg-emerald-500"></div>}
-                         {isLast && <div className="absolute top-0 left-0 w-1/2 h-[2.5px] bg-emerald-500"></div>}
-                         {!isFirst && !isLast && <div className="absolute top-0 left-0 w-full h-[2.5px] bg-emerald-500"></div>}
-                       </>
-                     )}
-                     <TreeNode 
-                       node={child} 
-                       members={members}
-                       onOpenProfile={onOpenProfile} 
-                       isRoot={false} 
-                       globalExpandAll={globalExpandAll} 
-                     />
-                  </div>
-                );
-             })}
-           </div>
+              return (
+                <div key={child.id} className="relative flex flex-col items-center px-2 sm:px-4">
+                  {!isOnly && (
+                    <>
+                      {isFirst && <div className="absolute top-0 right-0 w-1/2 h-[2.5px] bg-emerald-500"></div>}
+                      {isLast && <div className="absolute top-0 left-0 w-1/2 h-[2.5px] bg-emerald-500"></div>}
+                      {!isFirst && !isLast && <div className="absolute top-0 left-0 w-full h-[2.5px] bg-emerald-500"></div>}
+                    </>
+                  )}
+                  <TreeNode 
+                    node={child} 
+                    members={members}
+                    onOpenProfile={onOpenProfile} 
+                    isRoot={false} 
+                    globalExpandAll={globalExpandAll} 
+                  />
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
@@ -1335,6 +1761,9 @@ function AnggotaTab({ members, isAdmin, showToast }: { members: Member[]; isAdmi
   const [editingItem, setEditingItem] = useState<Member | null>(null);
   const [selectedProfile, setSelectedProfile] = useState<ProfileData | null>(null);
   const [itemToDelete, setItemToDelete] = useState<number | null>(null);
+  const [draggedMemberId, setDraggedMemberId] = useState<number | null>(null);
+  const [dragOverMemberId, setDragOverMemberId] = useState<number | null>(null);
+  const [isSavingOrder, setIsSavingOrder] = useState(false);
 
   const filtered = members.filter(m => {
     const q = searchTerm.toLowerCase();
@@ -1343,6 +1772,62 @@ function AnggotaTab({ members, isAdmin, showToast }: { members: Member[]; isAdmi
     const matchSpouse = spouses.some(s => s.name.toLowerCase().includes(q) || (s.domicile && s.domicile.toLowerCase().includes(q)));
     return matchSelf || matchSpouse;
   });
+
+  const handleMoveMember = async (memberId: number, direction: 'up' | 'down') => {
+    if (isSavingOrder) return;
+    const currentIndex = members.findIndex(m => m.id === memberId);
+    if (currentIndex === -1) return;
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= members.length) return;
+
+    const newMembers = [...members];
+    const [moved] = newMembers.splice(currentIndex, 1);
+    newMembers.splice(targetIndex, 0, moved);
+
+    const updatedWithOrder = newMembers.map((m, idx) => ({ ...m, order: idx }));
+    setIsSavingOrder(true);
+    try {
+      const promises = updatedWithOrder.map((m, idx) => {
+        if (members[idx]?.id !== m.id || m.order !== idx) {
+          return setDoc(getDocRef('members', m.id), cleanFirestoreData({ ...m, order: idx }), { merge: true });
+        }
+        return Promise.resolve();
+      });
+      await Promise.all(promises);
+      showToast(`Posisi "${moved.name}" berhasil digeser (${direction === 'up' ? 'ke atas' : 'ke bawah'})!`, 'success');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'members');
+      showToast('Gagal menyimpan urutan posisi anggota', 'error');
+    } finally {
+      setIsSavingOrder(false);
+    }
+  };
+
+  const handleDragDrop = async (sourceId: number, targetId: number) => {
+    if (sourceId === targetId || isSavingOrder) return;
+    const sourceIdx = members.findIndex(m => m.id === sourceId);
+    const targetIdx = members.findIndex(m => m.id === targetId);
+    if (sourceIdx === -1 || targetIdx === -1) return;
+
+    const newMembers = [...members];
+    const [moved] = newMembers.splice(sourceIdx, 1);
+    newMembers.splice(targetIdx, 0, moved);
+
+    const updatedWithOrder = newMembers.map((m, idx) => ({ ...m, order: idx }));
+    setIsSavingOrder(true);
+    try {
+      const promises = updatedWithOrder.map((m, idx) => {
+        return setDoc(getDocRef('members', m.id), cleanFirestoreData({ ...m, order: idx }), { merge: true });
+      });
+      await Promise.all(promises);
+      showToast(`Posisi "${moved.name}" berhasil dipindahkan ke posisi #${targetIdx + 1}!`, 'success');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'members');
+      showToast('Gagal menyimpan urutan posisi anggota', 'error');
+    } finally {
+      setIsSavingOrder(false);
+    }
+  };
 
   const openProfile = (member: Member, isSpouse: boolean, spouseObj?: Spouse) => {
     if (!isSpouse) {
@@ -1357,7 +1842,7 @@ function AnggotaTab({ members, isAdmin, showToast }: { members: Member[]; isAdmi
         domicile: member.domicile, 
         phone: member.phone, 
         spouse: spouseNames || '-', 
-        parentName: members.find(m => m.id === member.parentId)?.name || '-' 
+        parentName: getMemberParentName(member, members)
       });
     } else if (spouseObj) {
       setSelectedProfile({ 
@@ -1415,6 +1900,23 @@ function AnggotaTab({ members, isAdmin, showToast }: { members: Member[]; isAdmi
           <Plus size={20} className="mr-2"/> Tambah Anggota
         </button>
       )}
+
+      {/* BANNER MODE ADMIN: PETUNJUK MENGGESER POSISI */}
+      {isAdmin && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-950 px-3.5 py-2.5 rounded-xl text-xs flex items-center justify-between shadow-2xs">
+          <div className="flex items-center gap-2">
+            <span className="text-base font-black">⇅</span>
+            <span className="font-semibold">
+              Fitur Geser Posisi: Anda dapat menggeser posisi anggota ke atas (↑) / ke bawah (↓) atau tarik kartu (drag & drop) untuk mengatur susunan anggota.
+            </span>
+          </div>
+          {isSavingOrder && (
+            <span className="text-[10px] font-black text-emerald-800 bg-emerald-200/80 px-2 py-0.5 rounded-full animate-pulse whitespace-nowrap">
+              Menyimpan...
+            </span>
+          )}
+        </div>
+      )}
       
       <div className="relative">
         <Search className="absolute left-3 top-3.5 text-gray-400" size={20} />
@@ -1429,10 +1931,57 @@ function AnggotaTab({ members, isAdmin, showToast }: { members: Member[]; isAdmi
       <div className="space-y-4">
         {filtered.map(member => {
           const memberSpouses = getMemberSpouses(member);
+          const globalIndex = members.findIndex(m => m.id === member.id);
+          const isFirstInGlobal = globalIndex === 0;
+          const isLastInGlobal = globalIndex === members.length - 1;
 
           return (
-            <div key={member.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 transition hover:shadow-md">
-              <div className="flex gap-4 items-start relative z-10">
+            <div 
+              key={member.id} 
+              onDragOver={(e) => {
+                if (isAdmin && draggedMemberId && draggedMemberId !== member.id) {
+                  e.preventDefault();
+                  if (dragOverMemberId !== member.id) setDragOverMemberId(member.id);
+                }
+              }}
+              onDragLeave={() => {
+                if (dragOverMemberId === member.id) setDragOverMemberId(null);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                const sourceId = Number(e.dataTransfer.getData('text/plain') || draggedMemberId);
+                setDragOverMemberId(null);
+                setDraggedMemberId(null);
+                if (sourceId && sourceId !== member.id) {
+                  handleDragDrop(sourceId, member.id);
+                }
+              }}
+              className={`bg-white p-4 rounded-2xl shadow-sm border transition ${
+                dragOverMemberId === member.id 
+                  ? 'border-emerald-500 bg-emerald-50/50 ring-2 ring-emerald-300' 
+                  : 'border-gray-100 hover:shadow-md'
+              } ${draggedMemberId === member.id ? 'opacity-50' : ''}`}
+            >
+              <div className="flex gap-3 sm:gap-4 items-start relative z-10">
+                {/* DRAG HANDLE UNTUK ADMIN */}
+                {isAdmin && (
+                  <div 
+                    draggable={!searchTerm}
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('text/plain', String(member.id));
+                      setDraggedMemberId(member.id);
+                    }}
+                    onDragEnd={() => {
+                      setDraggedMemberId(null);
+                      setDragOverMemberId(null);
+                    }}
+                    className="flex items-center text-gray-400 hover:text-emerald-700 cursor-grab active:cursor-grabbing p-1 rounded hover:bg-emerald-50 transition self-center flex-shrink-0"
+                    title="Tahan & tarik untuk menggeser posisi anggota"
+                  >
+                    <GripVertical size={20} />
+                  </div>
+                )}
+
                 <div 
                   className={`w-16 h-16 rounded-full border-2 flex-shrink-0 flex items-center justify-center overflow-hidden cursor-pointer hover:opacity-85 transition shadow-sm ${member.gender === 'L' ? 'border-blue-200 bg-blue-50 text-blue-500' : 'border-pink-200 bg-pink-50 text-pink-500'}`} 
                   onClick={() => openProfile(member, false)}
@@ -1440,16 +1989,46 @@ function AnggotaTab({ members, isAdmin, showToast }: { members: Member[]; isAdmi
                 >
                   {member.photo ? <img src={member.photo} className="w-full h-full object-cover" alt={member.name} /> : <Users size={30} />}
                 </div>
+
                 <div className="flex-1 min-w-0">
-                  <div className="flex justify-between items-start">
-                     <h3 
-                       className="font-bold text-lg text-gray-800 truncate pr-2 cursor-pointer hover:text-green-700" 
-                       onClick={() => openProfile(member, false)}
-                     >
-                       {member.name}
-                     </h3>
+                  <div className="flex justify-between items-start gap-1">
+                     <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                       {/* NOMOR URUT POSISI ANGGOTA */}
+                       <span className="text-[9.5px] font-black px-1.5 py-0.5 rounded-md bg-emerald-100/90 text-emerald-800 border border-emerald-300 flex-shrink-0" title="Nomor urut posisi anggota">
+                         #{globalIndex + 1}
+                       </span>
+                       <h3 
+                         className="font-bold text-lg text-gray-800 truncate cursor-pointer hover:text-green-700" 
+                         onClick={() => openProfile(member, false)}
+                       >
+                         {member.name}
+                       </h3>
+                     </div>
+
                      {isAdmin && (
-                       <div className="flex gap-1.5 flex-shrink-0">
+                       <div className="flex items-center gap-1.5 flex-shrink-0">
+                         {/* TOMBOL GESER POSISI KE ATAS & KE BAWAH */}
+                         <div className="flex items-center bg-gray-100 p-0.5 rounded-lg border border-gray-200">
+                           <button 
+                             type="button"
+                             disabled={isFirstInGlobal || isSavingOrder} 
+                             onClick={() => handleMoveMember(member.id, 'up')} 
+                             className="p-1.5 text-gray-700 hover:text-emerald-700 hover:bg-white rounded cursor-pointer disabled:opacity-25 disabled:cursor-not-allowed transition" 
+                             title="Geser posisi ke atas (↑)"
+                           >
+                             <ArrowUp size={14}/>
+                           </button>
+                           <button 
+                             type="button"
+                             disabled={isLastInGlobal || isSavingOrder} 
+                             onClick={() => handleMoveMember(member.id, 'down')} 
+                             className="p-1.5 text-gray-700 hover:text-emerald-700 hover:bg-white rounded cursor-pointer disabled:opacity-25 disabled:cursor-not-allowed transition" 
+                             title="Geser posisi ke bawah (↓)"
+                           >
+                             <ArrowDown size={14}/>
+                           </button>
+                         </div>
+
                          <button 
                            onClick={() => { setEditingItem(member); setIsModalOpen(true); }} 
                            className="text-blue-600 bg-blue-50 hover:bg-blue-100 p-1.5 rounded-lg cursor-pointer transition"
@@ -1467,6 +2046,7 @@ function AnggotaTab({ members, isAdmin, showToast }: { members: Member[]; isAdmi
                        </div>
                      )}
                   </div>
+
                   <div className="mt-1 mb-2 flex items-center gap-2">
                     <span className={`text-[9px] font-black px-2 py-0.5 rounded-full border ${member.isAlive ? 'text-green-600 bg-green-50 border-green-200' : 'text-gray-500 bg-gray-100 border-gray-200'}`}>
                       {member.isAlive ? 'HIDUP' : 'ALM'}
@@ -1476,7 +2056,7 @@ function AnggotaTab({ members, isAdmin, showToast }: { members: Member[]; isAdmi
                     </span>
                   </div>
                   <div className="text-[11px] text-gray-600 space-y-1">
-                    <p className="truncate">Ortu: <span className="font-semibold text-gray-800">{members.find(m => m.id === member.parentId)?.name || '-'}</span></p>
+                    <p className="truncate">Ortu: <span className="font-semibold text-gray-800">{getMemberParentName(member, members)}</span></p>
                     <p className="break-words">Domisili: <span className="font-semibold text-gray-800">{member.domicile || '-'}</span></p>
                     {member.phone && member.phone !== '-' && (
                       <p className="break-words">No HP: <span className="font-semibold text-gray-800">{member.phone}</span></p>
@@ -1556,6 +2136,9 @@ function ModalFormAnggota({
   showToast: (m: string, t?: 'success' | 'error') => void; 
   onClose: () => void;
 }) {
+  // Mbah Sumadi (1), Istri 1 (2), dan Istri 2 (3) adalah Pemuncak Silsilah
+  const isPemuncak = member?.id === 1 || member?.id === 2 || member?.id === 3;
+
   const [formData, setFormData] = useState<Partial<Member>>(() => {
     if (member) {
       return {
@@ -1584,6 +2167,137 @@ function ModalFormAnggota({
       spouseDeathDate: '' 
     };
   });
+
+  // Pemilihan Orang Tua: default Mbah KH. Sumadi & Mbah Masripah ('2') untuk anggota baru
+  const [selectedParentChoice, setSelectedParentChoice] = useState<string>(() => {
+    if (member) {
+      if (member.id === 1 || member.id === 2 || member.id === 3) return '';
+      if (member.parentId === 2) return '2';
+      if (member.parentId === 3) return '3';
+      if (member.parentId === 1) {
+        return (member.motherId === 3 || member.branch === 'istri2') ? '3' : '2';
+      }
+      if (member.parentId) {
+        const parentObj = members.find(m => m.id === member.parentId);
+        if (parentObj) {
+          const sps = getMemberSpouses(parentObj, members);
+          if (sps.length > 1) {
+            if (member.parentSpouseName) {
+              const idx = sps.findIndex(s => s.name.trim().toLowerCase() === member.parentSpouseName?.trim().toLowerCase());
+              if (idx !== -1) return `${member.parentId}_${idx}`;
+            }
+            if (member.spouseIndex !== undefined && member.spouseIndex !== null) {
+              return `${member.parentId}_${member.spouseIndex}`;
+            }
+            return `${member.parentId}_0`;
+          }
+          if (sps.length === 1) {
+            return `${member.parentId}_0`;
+          }
+          return `${member.parentId}`;
+        }
+      }
+      if (member.motherId === 3 || member.branch === 'istri2' || member.id === 31 || member.id === 32) return '3';
+      return '2';
+    }
+    return '2';
+  });
+
+  // Daftar calon orang tua dari silsilah (bukan diri sendiri dan bukan pemuncak 1, 2, 3)
+  const eligibleParents = useMemo(() => {
+    return members.filter(m => 
+      m.id !== formData.id && 
+      m.id !== 1 && 
+      m.id !== 2 && 
+      m.id !== 3 && 
+      m.relationType !== 'spouse'
+    );
+  }, [members, formData.id]);
+
+  const masripahParents = useMemo(() => {
+    return eligibleParents.filter(m => getMemberBranch(m, members) === 'istri1');
+  }, [eligibleParents, members]);
+
+  const munasikahParents = useMemo(() => {
+    return eligibleParents.filter(m => getMemberBranch(m, members) === 'istri2');
+  }, [eligibleParents, members]);
+
+  // Bangun opsi orang tua untuk setiap cabang (mendukung jika orang tua punya >1 istri, contoh: Masruron)
+  const buildParentOptions = (parentList: Member[]) => {
+    const options: { value: string; label: string }[] = [];
+    parentList.forEach(p => {
+      const sps = getMemberSpouses(p, members);
+      const icon = p.gender === 'L' ? '👨' : '👩';
+      const domText = p.domicile ? ` (${p.domicile})` : '';
+
+      if (sps.length === 0) {
+        options.push({
+          value: `${p.id}`,
+          label: `${icon} ${p.name}${domText}`
+        });
+      } else if (sps.length === 1) {
+        options.push({
+          value: `${p.id}_0`,
+          label: `${icon} ${p.name} & ${sps[0].name}${domText}`
+        });
+      } else {
+        // LEBIH DARI 1 PASANGAN (CONTOH: MASRURON DENGAN DUA ISTRI: SRI & MAGHFIROH)
+        // DITAMPILKAN SEMUA PILIHAN: MASRURON & ISTRI PERTAMA DAN MASRURON & ISTRI KEDUA
+        sps.forEach((sp, idx) => {
+          const spouseLabel = p.gender === 'L' 
+            ? (idx === 0 ? 'Istri Pertama' : idx === 1 ? 'Istri Kedua' : `Istri ke-${idx + 1}`)
+            : (idx === 0 ? 'Suami Pertama' : idx === 1 ? 'Suami Kedua' : `Suami ke-${idx + 1}`);
+          
+          options.push({
+            value: `${p.id}_${idx}`,
+            label: `${icon} ${p.name} & ${sp.name} (${spouseLabel})${domText}`
+          });
+        });
+      }
+    });
+    return options;
+  };
+
+  const masripahOptions = useMemo(() => buildParentOptions(masripahParents), [masripahParents, members]);
+  const munasikahOptions = useMemo(() => buildParentOptions(munasikahParents), [munasikahParents, members]);
+
+  const selectedParentInfo = useMemo(() => {
+    if (!selectedParentChoice) return null;
+    if (selectedParentChoice === '2') {
+      return {
+        label: 'Mbah KH. Sumadi & Mbah Masripah (Istri 1)',
+        branch: 'istri1' as const
+      };
+    }
+    if (selectedParentChoice === '3') {
+      return {
+        label: 'Mbah KH. Sumadi & Mbah Munasikah (Istri 2)',
+        branch: 'istri2' as const
+      };
+    }
+    if (selectedParentChoice.includes('_')) {
+      const [pIdStr, sIdxStr] = selectedParentChoice.split('_');
+      const p = members.find(m => m.id === Number(pIdStr));
+      if (!p) return null;
+      const sIdx = Number(sIdxStr);
+      const sps = getMemberSpouses(p, members);
+      const sp = sps[sIdx];
+      const pBranch = getMemberBranch(p, members);
+      const spouseLabel = sp 
+        ? ` & ${sp.name} (${p.gender === 'L' ? (sIdx === 0 ? 'Istri Pertama' : 'Istri Kedua') : (sIdx === 0 ? 'Suami Pertama' : 'Suami Kedua')})`
+        : '';
+      return {
+        label: `${p.name}${spouseLabel}`,
+        branch: pBranch
+      };
+    }
+    const p = members.find(m => m.id === Number(selectedParentChoice));
+    if (!p) return null;
+    return {
+      label: p.name,
+      branch: getMemberBranch(p, members)
+    };
+  }, [selectedParentChoice, members]);
 
   // State untuk multi-pasangan
   const [spousesList, setSpousesList] = useState<Spouse[]>(() => {
@@ -1708,15 +2422,81 @@ function ModalFormAnggota({
         }));
 
       const primarySpouse = cleanSpouses[0];
-      const relationType = formData.relationType === 'spouse' ? 'spouse' : 'child';
-      const spouseOfId = relationType === 'spouse' ? (formData.parentId ? Number(formData.parentId) : null) : null;
+      
+      let parentId: number | null = null;
+      let relationType: 'child' | 'spouse' = 'child';
+      let spouseOfId: number | null = null;
+      let memberBranch: 'istri1' | 'istri2' = 'istri1';
+      let motherId: number | null = 2;
+      let parentSpouseName: string | undefined = undefined;
+      let spouseIndex: number | undefined = undefined;
+
+      if (isPemuncak) {
+        parentId = null;
+        relationType = member?.id === 1 ? 'child' : 'spouse';
+        spouseOfId = member?.id === 1 ? null : 1;
+        memberBranch = member?.id === 3 ? 'istri2' : 'istri1';
+        motherId = member?.id === 3 ? 3 : 2;
+      } else {
+        relationType = 'child';
+        spouseOfId = null;
+
+        if (selectedParentChoice === '2') {
+          parentId = 2;
+          motherId = 2;
+          memberBranch = 'istri1';
+          parentSpouseName = 'Mbah Masripah';
+          spouseIndex = 0;
+        } else if (selectedParentChoice === '3') {
+          parentId = 3;
+          motherId = 3;
+          memberBranch = 'istri2';
+          parentSpouseName = 'Mbah Munasikah';
+          spouseIndex = 1;
+        } else if (selectedParentChoice) {
+          if (selectedParentChoice.includes('_')) {
+            const [pIdStr, sIdxStr] = selectedParentChoice.split('_');
+            const pId = Number(pIdStr);
+            const sIdx = Number(sIdxStr);
+            parentId = pId;
+            spouseIndex = sIdx;
+            const parentObj = members.find(m => m.id === pId);
+            if (parentObj) {
+              memberBranch = getMemberBranch(parentObj, members);
+              const sps = getMemberSpouses(parentObj, members);
+              if (sps[sIdx]) {
+                parentSpouseName = sps[sIdx].name;
+                motherId = (parentObj.gender === 'P' ? parentObj.id : (sps[sIdx].id ? Number(sps[sIdx].id) : null));
+              } else {
+                motherId = parentObj.motherId || (memberBranch === 'istri2' ? 3 : 2);
+              }
+            }
+          } else {
+            const pId = Number(selectedParentChoice);
+            parentId = pId;
+            const parentObj = members.find(m => m.id === pId);
+            if (parentObj) {
+              memberBranch = getMemberBranch(parentObj, members);
+              motherId = parentObj.motherId || (memberBranch === 'istri2' ? 3 : 2);
+            }
+          }
+        } else {
+          parentId = 2;
+          motherId = 2;
+          memberBranch = 'istri1';
+        }
+      }
 
       const payload: Member = {
         ...formData as any,
         id, 
-        parentId: formData.parentId ? Number(formData.parentId) : null,
+        parentId,
         relationType,
         spouseOfId,
+        branch: memberBranch,
+        motherId,
+        parentSpouseName,
+        spouseIndex,
         spouses: cleanSpouses,
         // Backward compatibility dengan data pasangan tunggal lama
         spouse: primarySpouse ? primarySpouse.name : '',
@@ -1725,11 +2505,12 @@ function ModalFormAnggota({
         spouseDomicile: primarySpouse ? (primarySpouse.domicile || '') : '',
         spousePhone: primarySpouse ? (primarySpouse.phone || '') : '',
         spouseBirthDate: primarySpouse ? (primarySpouse.birthDate || '') : '',
-        spouseDeathDate: primarySpouse ? (primarySpouse.deathDate || '') : ''
+        spouseDeathDate: primarySpouse ? (primarySpouse.deathDate || '') : '',
+        order: member?.order !== undefined ? member.order : (members.length > 0 ? Math.max(...members.map(m => m.order ?? 0)) + 1 : 0)
       };
 
-      await setDoc(getDocRef('members', id), payload);
-      showToast('Data Anggota & Pasangan berhasil disimpan di Firebase', 'success');
+      await setDoc(getDocRef('members', id), cleanFirestoreData(payload));
+      showToast('Data Anggota & Silsilah berhasil disimpan di Firebase', 'success');
       onClose();
     } catch (err) { 
       handleFirestoreError(err, OperationType.WRITE, 'members');
@@ -1745,7 +2526,7 @@ function ModalFormAnggota({
           {/* HEADER MODAL */}
           <div className="p-4 border-b flex justify-between items-center sticky top-0 bg-white z-20 shadow-xs">
             <h2 className="font-bold text-green-700 text-sm">
-              {member ? 'Edit Anggota Keluarga' : 'Tambah Anggota Keluarga'}
+              {isPemuncak ? 'Edit Profil Pemuncak Silsilah' : member ? 'Edit Anggota Keluarga' : 'Tambah Anggota Keluarga'}
             </h2>
             <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full cursor-pointer transition">
               <X size={20}/>
@@ -1864,92 +2645,91 @@ function ModalFormAnggota({
               )}
             </div>
 
-            {/* HUBUNGAN SILSILAH: PASANGAN (SEJAJAR) ATAU ANAK/KETURUNAN (KE BAWAH) */}
-            <div className="bg-emerald-50/60 p-3.5 rounded-2xl border-2 border-emerald-200 space-y-3">
-              <div>
-                <label className="block text-xs font-black text-emerald-950 mb-1.5 uppercase tracking-wide">
-                  Hubungan dalam Pohon Silsilah *
-                </label>
-                <div className="grid grid-cols-2 gap-2 text-xs font-bold">
-                  <label className={`flex items-center gap-2 p-2.5 rounded-xl border-2 cursor-pointer transition ${formData.relationType !== 'spouse' ? 'bg-white border-green-600 text-green-900 shadow-xs' : 'bg-white/50 border-gray-200 text-gray-500 hover:bg-white'}`}>
-                    <input 
-                      type="radio" 
-                      name="relationType" 
-                      checked={formData.relationType !== 'spouse'} 
-                      onChange={() => setFormData(prev => ({ ...prev, relationType: 'child' }))}
-                      className="accent-green-600"
-                    />
-                    <div className="flex flex-col">
-                      <span className="font-black text-[11px]">Anak / Keturunan</span>
-                      <span className="text-[9px] font-normal text-emerald-700">Garis silsilah ke bawah (┃)</span>
-                    </div>
-                  </label>
-
-                  <label className={`flex items-center gap-2 p-2.5 rounded-xl border-2 cursor-pointer transition ${formData.relationType === 'spouse' ? 'bg-white border-amber-600 text-amber-950 shadow-xs' : 'bg-white/50 border-gray-200 text-gray-500 hover:bg-white'}`}>
-                    <input 
-                      type="radio" 
-                      name="relationType" 
-                      checked={formData.relationType === 'spouse'} 
-                      onChange={() => setFormData(prev => ({ ...prev, relationType: 'spouse' }))}
-                      className="accent-amber-600"
-                    />
-                    <div className="flex flex-col">
-                      <span className="font-black text-[11px]">Pasangan (Istri/Suami)</span>
-                      <span className="text-[9px] font-normal text-amber-800">Garis silsilah sejajar (━ 💍 ━)</span>
-                    </div>
-                  </label>
+            {/* FORM PEMILIHAN ORANG TUA */}
+            {isPemuncak ? (
+              <div className="bg-gradient-to-r from-amber-50 to-emerald-50 p-4 rounded-2xl border-2 border-amber-300 flex items-center gap-3 shadow-xs">
+                <span className="text-3xl">👑</span>
+                <div>
+                  <h3 className="text-xs font-black text-emerald-950 uppercase tracking-wide">Pemuncak Silsilah Keluarga</h3>
+                  <p className="text-[11px] text-emerald-800 font-medium leading-relaxed">
+                    {member?.id === 1 
+                      ? 'Mbah KH. Sumadi adalah pemuncak silsilah utama (posisi tengah sejajar).' 
+                      : member?.id === 2 
+                      ? 'Mbah Masripah adalah pemuncak silsilah (Istri Pertama, posisi kanan sejajar).' 
+                      : 'Mbah Munasikah adalah pemuncak silsilah (Istri Kedua, posisi kiri sejajar).'}
+                  </p>
                 </div>
               </div>
+            ) : (
+              <div className="bg-emerald-50/70 p-4 rounded-2xl border-2 border-emerald-200 space-y-3">
+                <div>
+                  <label className="block text-xs font-black text-emerald-950 mb-1.5 uppercase tracking-wide flex items-center justify-between">
+                    <span>Pilih Orang Tua (Ayah / Ibu) *</span>
+                    <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-300">
+                      Otomatis Masuk Silsilah
+                    </span>
+                  </label>
 
-              {formData.relationType === 'spouse' ? (
-                <div>
-                  <label className="block text-xs font-bold text-amber-950 mb-1">
-                    Pasangan dari Anggota: *
-                  </label>
-                  <select 
-                    name="parentId" 
-                    value={formData.parentId ?? ''} 
-                    onChange={handleChange} 
+                  <select
+                    value={selectedParentChoice}
+                    onChange={(e) => setSelectedParentChoice(e.target.value)}
                     required
-                    className="w-full border-2 border-amber-300 p-3 rounded-xl bg-white text-sm font-medium outline-none focus:border-amber-500"
+                    className="w-full border-2 border-emerald-300 p-3 rounded-xl bg-white text-xs font-bold text-gray-800 outline-none focus:border-emerald-500 shadow-2xs cursor-pointer"
                   >
-                    <option value="">-- Pilih Pasangannya (Terhubung Sejajar) --</option>
-                    {members.filter(m => m.id !== formData.id).map(m => (
-                      <option key={m.id} value={m.id}>
-                        {m.name} {m.domicile ? `(${m.domicile})` : ''}
+                    <option value="">-- Pilih Orang Tua dari Silsilah Keluarga --</option>
+                    
+                    <optgroup label="👑 Generasi 1 (Anak Langsung Mbah KH. Sumadi)">
+                      <option value="2">
+                        🌸 Mbah KH. Sumadi & Mbah Masripah (Cabang Kanan / Istri 1)
                       </option>
-                    ))}
-                  </select>
-                  <p className="text-[10px] text-amber-900 mt-1 font-medium flex items-center gap-1">
-                    <span>✨</span>
-                    <span>Pada menu pohon silsilah, kartu anggota ini akan terhubung <strong>sejajar horizontal (━ 💍 ━)</strong> di samping pasangannya.</span>
-                  </p>
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-xs font-bold text-green-950 mb-1">
-                    Orang Tua (Garis Keturunan ke Bawah):
-                  </label>
-                  <select 
-                    name="parentId" 
-                    value={formData.parentId ?? ''} 
-                    onChange={handleChange} 
-                    className="w-full border-2 border-green-300 p-3 rounded-xl bg-white text-sm font-medium outline-none focus:border-green-500"
-                  >
-                    <option value="">-- Puncak Silsilah / Generasi Pertama (Kosong) --</option>
-                    {members.filter(m => m.id !== formData.id).map(m => (
-                      <option key={m.id} value={m.id}>
-                        {m.name} {m.domicile ? `(${m.domicile})` : ''}
+                      <option value="3">
+                        🌺 Mbah KH. Sumadi & Mbah Munasikah (Cabang Kiri / Istri 2)
                       </option>
-                    ))}
+                    </optgroup>
+
+                    {masripahOptions.length > 0 && (
+                      <optgroup label="👨‍👩‍👧 Keturunan Cabang Mbah Masripah (Kanan)">
+                        {masripahOptions.map(opt => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+
+                    {munasikahOptions.length > 0 && (
+                      <optgroup label="👨‍👩‍👧 Keturunan Cabang Mbah Munasikah (Kiri)">
+                        {munasikahOptions.map(opt => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
                   </select>
-                  <p className="text-[10px] text-emerald-800 mt-1 font-medium flex items-center gap-1">
-                    <span>✨</span>
-                    <span>Pada menu pohon silsilah, kartu anggota ini adalah keturunan, garis silsilah akan turun <strong>vertikal ke bawah (┃)</strong> dari orang tuanya.</span>
-                  </p>
+
+                  {/* Keterangan Posisi Otomatis di Pohon Silsilah */}
+                  {selectedParentInfo && (
+                    <div className="mt-2.5 p-3 rounded-xl bg-white border border-emerald-200 shadow-2xs flex items-start gap-2.5">
+                      <span className="text-lg">🌳</span>
+                      <div className="text-[11px] text-emerald-950 leading-snug">
+                        <p className="font-bold flex items-center gap-1.5">
+                          <span>Posisi di Pohon Silsilah:</span>
+                          <span className={`text-[9px] font-black px-1.5 py-0.2 rounded-md ${
+                            selectedParentInfo.branch === 'istri1' ? 'bg-pink-100 text-pink-800' : 'bg-purple-100 text-purple-800'
+                          }`}>
+                            {selectedParentInfo.branch === 'istri1' ? 'Cabang Kanan (Mbah Masripah)' : 'Cabang Kiri (Mbah Munasikah)'}
+                          </span>
+                        </p>
+                        <p className="text-emerald-700 text-[10px] mt-0.5 font-medium">
+                          Anggota ini otomatis tampil tepat di bawah <strong>{selectedParentInfo.label}</strong> pada menu Pohon Silsilah.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
             {/* DOMISILI & NO HP */}
             <div className="grid grid-cols-2 gap-3">
@@ -2261,7 +3041,7 @@ function ModalFormAgenda({ agenda, showToast, onClose }: { agenda: Agenda | null
     e.preventDefault();
     try {
       const id = agenda ? agenda.id : Date.now();
-      await setDoc(getDocRef('agendas', id), { ...formData, id });
+      await setDoc(getDocRef('agendas', id), cleanFirestoreData({ ...formData, id }));
       showToast('Agenda berhasil disimpan di Firebase', 'success');
       onClose();
     } catch (err) { 
@@ -2382,7 +3162,7 @@ function ModalFormKas({ item, showToast, onClose }: { item: Transaction | null; 
     e.preventDefault();
     try {
       const id = item ? item.id : Date.now();
-      await setDoc(getDocRef('transactions', id), { ...formData, id, amount: Number(formData.amount) });
+      await setDoc(getDocRef('transactions', id), cleanFirestoreData({ ...formData, id, amount: Number(formData.amount) }));
       showToast('Transaksi berhasil disimpan di Firebase', 'success');
       onClose();
     } catch (err) { 

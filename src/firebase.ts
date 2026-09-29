@@ -86,6 +86,24 @@ export async function testConnection() {
 
 testConnection();
 
+// Helper to recursively remove undefined properties from Firestore payloads
+export function cleanFirestoreData<T>(obj: T): T {
+  if (obj === null || obj === undefined) return null as any;
+  if (Array.isArray(obj)) {
+    return obj.map(item => cleanFirestoreData(item)) as any;
+  }
+  if (typeof obj === 'object' && !(obj instanceof Date)) {
+    const cleaned: Record<string, any> = {};
+    for (const [key, value] of Object.entries(obj as Record<string, any>)) {
+      if (value !== undefined) {
+        cleaned[key] = cleanFirestoreData(value);
+      }
+    }
+    return cleaned as T;
+  }
+  return obj;
+}
+
 // Re-export Firestore & Auth methods
 export { 
   getAuth, 
