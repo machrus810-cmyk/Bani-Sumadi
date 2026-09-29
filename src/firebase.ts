@@ -14,6 +14,7 @@ import {
   collection, 
   doc, 
   getDocs, 
+  getDoc,
   setDoc, 
   deleteDoc, 
   onSnapshot,
@@ -35,6 +36,7 @@ export const appId = firebaseConfig.projectId || 'ai-studio-applet-webapp-326e4'
 // Helper references for Firestore collections and documents
 export const getColRef = (name: string) => collection(db, name);
 export const getDocRef = (name: string, id: string | number) => doc(db, name, id.toString());
+export { getDoc };
 
 export enum OperationType {
   CREATE = 'create',

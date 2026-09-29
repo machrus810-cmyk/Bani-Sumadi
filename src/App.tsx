@@ -4,7 +4,8 @@ import {
   LogOut, Plus, Edit2, Trash2, Search, ChevronLeft, 
   ChevronRight, Camera, Image as ImageIcon, UploadCloud, X, Download, FolderPlus,
   Minus, Maximize, FileText, CheckCircle, Lock, ShieldCheck,
-  ArrowUp, ArrowDown, GripVertical, MapPin, Infinity as InfinityIcon, Phone
+  ArrowUp, ArrowDown, GripVertical, MapPin, Infinity as InfinityIcon, Phone,
+  TrendingUp, TrendingDown, ArrowDownLeft, ArrowUpRight
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -15,6 +16,7 @@ import {
   signInAnonymously, 
   signInWithCustomToken, 
   getDocs, 
+  getDoc,
   setDoc, 
   deleteDoc, 
   onSnapshot,
@@ -125,32 +127,72 @@ export const getMemberSpouses = (m: Member, allMembers?: Member[]): Spouse[] => 
     });
   }
 
+  // Mbah Munasikah adalah Istri 1 (Pertama), Mbah Masripah adalah Istri 2 (Kedua)
+  if (m.id === 1) {
+    result.sort((a, b) => {
+      const aIsMunasikah = a.name.toLowerCase().includes('munasikah');
+      const bIsMunasikah = b.name.toLowerCase().includes('munasikah');
+      if (aIsMunasikah && !bIsMunasikah) return -1;
+      if (!aIsMunasikah && bIsMunasikah) return 1;
+      return 0;
+    });
+  }
+
   return result;
 };
 
 export const getMemberBranch = (member: Member, allMembers: Member[]): 'istri1' | 'istri2' => {
-  if (member.id === 2 || member.parentId === 2 || (member.parentId === 1 && member.motherId === 2) || member.branch === 'istri1') {
-    return 'istri1';
-  }
-  if (member.id === 3 || member.parentId === 3 || (member.parentId === 1 && member.motherId === 3) || member.branch === 'istri2') {
-    return 'istri2';
-  }
+  if (member.name?.toLowerCase().includes('munasikah')) return 'istri1';
+  if (member.name?.toLowerCase().includes('masripah')) return 'istri2';
+
+  if (member.branch === 'istri1') return 'istri1';
+  if (member.branch === 'istri2') return 'istri2';
+
+  const munasikah = allMembers.find(m => m.name.toLowerCase().includes('munasikah'));
+  const masripah = allMembers.find(m => m.name.toLowerCase().includes('masripah'));
+
+  if (munasikah && (member.parentId === munasikah.id || member.motherId === munasikah.id)) return 'istri1';
+  if (masripah && (member.parentId === masripah.id || member.motherId === masripah.id)) return 'istri2';
+
   if (member.parentId) {
     const parent = allMembers.find(m => m.id === member.parentId);
     if (parent) return getMemberBranch(parent, allMembers);
+  }
+  if (member.motherId) {
+    const mother = allMembers.find(m => m.id === member.motherId);
+    if (mother) return getMemberBranch(mother, allMembers);
   }
   return 'istri1';
 };
 
 export const getMemberParentName = (member: Member, allMembers: Member[]): string => {
   if (member.id === 1) return 'Pemuncak Silsilah (Akar Utama)';
-  if (member.id === 2 || member.id === 3) return '-';
-  if (member.parentId === 2 || (member.parentId === 1 && member.motherId === 2)) {
-    return 'Mbah KH. Sumadi & Mbah Masripah (Istri 1)';
+  
+  const munasikah = allMembers.find(m => m.name.toLowerCase().includes('munasikah'));
+  const masripah = allMembers.find(m => m.name.toLowerCase().includes('masripah'));
+
+  if (munasikah && member.id === munasikah.id) return '-';
+  if (masripah && member.id === masripah.id) return '-';
+
+  // Keturunan Mbah Munasikah (Istri 1 / Istri Pertama)
+  const isMunasikahChild = 
+    (munasikah && (member.parentId === munasikah.id || member.motherId === munasikah.id)) ||
+    (member.parentId === 1 && (member.branch === 'istri1' || (munasikah && member.motherId === munasikah.id))) ||
+    (member.branch === 'istri1' && (!member.parentId || member.parentId === 1 || member.parentId === munasikah?.id));
+
+  // Keturunan Mbah Masripah (Istri 2 / Istri Kedua)
+  const isMasripahChild = 
+    (masripah && (member.parentId === masripah.id || member.motherId === masripah.id)) ||
+    (member.parentId === 1 && (member.branch === 'istri2' || (masripah && member.motherId === masripah.id))) ||
+    (member.branch === 'istri2' && (!member.parentId || member.parentId === 1 || member.parentId === masripah?.id));
+
+  if (isMunasikahChild) {
+    return `Mbah KH. Sumadi & ${munasikah ? munasikah.name : 'Mbah Munasikah (Istri 1)'}`;
   }
-  if (member.parentId === 3 || (member.parentId === 1 && member.motherId === 3)) {
-    return 'Mbah KH. Sumadi & Mbah Munasikah (Istri 2)';
+  if (isMasripahChild) {
+    return `Mbah KH. Sumadi & ${masripah ? masripah.name : 'Mbah Masripah (Istri 2)'}`;
   }
+
   if (member.parentId) {
     const parent = allMembers.find(m => m.id === member.parentId);
     if (parent) {
@@ -167,12 +209,6 @@ export const getMemberParentName = (member: Member, allMembers: Member[]): strin
       const spouse = allMembers.find(s => s.id === parent.spouseOfId || (s.parentId === parent.id && s.relationType === 'spouse')) || (parent.spouse ? { name: parent.spouse } : null);
       return spouse ? `${parent.name} & ${spouse.name}` : parent.name;
     }
-  }
-  if (member.branch === 'istri2') {
-    return 'Mbah KH. Sumadi & Mbah Munasikah (Istri 2)';
-  }
-  if (member.branch === 'istri1') {
-    return 'Mbah KH. Sumadi & Mbah Masripah (Istri 1)';
   }
   return '-';
 };
@@ -201,6 +237,12 @@ export interface SliderImage {
   description?: string;
 }
 
+export interface KasSession {
+  id: number;
+  title: string;
+  transactions: Transaction[];
+}
+
 export interface IuranRow {
   id: number;
   name: string;
@@ -215,8 +257,8 @@ export interface IuranSession {
 
 const rawInitialMembers: Member[] = [
   { id: 1, name: "Mbah KH. Sumadi", isAlive: false, gender: "L", parentId: null, spouse: "", domicile: "Pondok Pesantren", phone: "-", birthDate: "1935-01-01", deathDate: "2005-05-10", photo: "", spousePhoto: "", spouseIsAlive: false, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "" },
-  { id: 2, name: "Mbah Masripah (Istri 1)", isAlive: false, gender: "P", parentId: null, relationType: 'spouse', spouseOfId: 1, spouse: "", domicile: "Pondok Pesantren", phone: "-", birthDate: "1938-03-12", deathDate: "2010-08-20", photo: "", spousePhoto: "", spouseIsAlive: false, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "", branch: "istri1" },
-  { id: 3, name: "Mbah Munasikah (Istri 2)", isAlive: false, gender: "P", parentId: null, relationType: 'spouse', spouseOfId: 1, spouse: "", domicile: "Pondok Pesantren", phone: "-", birthDate: "1942-07-22", deathDate: "2015-11-05", photo: "", spousePhoto: "", spouseIsAlive: false, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "", branch: "istri2" }
+  { id: 2, name: "Mbah Munasikah (Istri 1)", isAlive: false, gender: "P", parentId: null, relationType: 'spouse', spouseOfId: 1, spouse: "", domicile: "Pondok Pesantren", phone: "-", birthDate: "1938-03-12", deathDate: "2010-08-20", photo: "", spousePhoto: "", spouseIsAlive: false, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "", branch: "istri1" },
+  { id: 3, name: "Mbah Masripah (Istri 2)", isAlive: false, gender: "P", parentId: null, relationType: 'spouse', spouseOfId: 1, spouse: "", domicile: "Pondok Pesantren", phone: "-", birthDate: "1942-07-22", deathDate: "2015-11-05", photo: "", spousePhoto: "", spouseIsAlive: false, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "", branch: "istri2" }
 ];
 
 const initialMembers: Member[] = rawInitialMembers.map((m, idx) => ({ ...m, order: idx }));
@@ -230,6 +272,14 @@ const initialTransactions: Transaction[] = [
   { id: 1, date: "2026-05-15", type: "in", amount: 500000, desc: "Donasi Budi" },
   { id: 2, date: "2026-05-10", type: "out", amount: 50000, desc: "Biaya admin bank" },
   { id: 3, date: "2026-05-01", type: "in", amount: 9650000, desc: "Sisa Saldo Bulan Lalu" }
+];
+
+const initialKasSessions: KasSession[] = [
+  {
+    id: 1,
+    title: "Kas Utama Keluarga",
+    transactions: initialTransactions
+  }
 ];
 
 const initialSliderImages: SliderImage[] = [
@@ -311,6 +361,7 @@ export default function BaniSumadiApp() {
   const [members, setMembers] = useState<Member[]>([]);
   const [agendas, setAgendas] = useState<Agenda[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [kasSessions, setKasSessions] = useState<KasSession[]>([]);
   const [sliderImages, setSliderImages] = useState<SliderImage[]>([]);
   const [iuranSessions, setIuranSessions] = useState<IuranSession[]>([]);
   const hasSeeded = useRef(false);
@@ -353,6 +404,7 @@ export default function BaniSumadiApp() {
         { name: 'members', data: initialMembers },
         { name: 'agendas', data: initialAgendas },
         { name: 'transactions', data: initialTransactions },
+        { name: 'kasSessions', data: initialKasSessions },
         { name: 'sliderImages', data: initialSliderImages },
         { name: 'iuranSessions', data: initialIuranSessions }
       ];
@@ -394,6 +446,10 @@ export default function BaniSumadiApp() {
         snap => setTransactions(snap.docs.map(d => ({...d.data(), id: Number(d.id)} as Transaction))),
         err => handleFirestoreError(err, OperationType.GET, 'transactions')
       ),
+      onSnapshot(getColRef('kasSessions'), 
+        snap => setKasSessions(snap.docs.map(d => ({...d.data(), id: Number(d.id)} as KasSession))),
+        err => handleFirestoreError(err, OperationType.GET, 'kasSessions')
+      ),
       onSnapshot(getColRef('sliderImages'), 
         snap => setSliderImages(snap.docs.map(d => ({...d.data(), id: Number(d.id)} as SliderImage))),
         err => handleFirestoreError(err, OperationType.GET, 'sliderImages')
@@ -407,7 +463,20 @@ export default function BaniSumadiApp() {
     return () => unsubscribes.forEach(unsub => unsub());
   }, [isFirebaseReady]);
 
-  const totalKas = useMemo(() => transactions.reduce((acc, curr) => curr.type === 'in' ? acc + curr.amount : acc - curr.amount, 0), [transactions]);
+  const latestKasSession = useMemo(() => {
+    if (kasSessions.length === 0) return null;
+    return [...kasSessions].sort((a, b) => b.id - a.id)[0];
+  }, [kasSessions]);
+
+  const totalKas = useMemo(() => {
+    if (latestKasSession) {
+      const currentTx = latestKasSession.transactions || [];
+      const totalIn = currentTx.filter(t => t.type === 'in').reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+      const totalOut = currentTx.filter(t => t.type === 'out').reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+      return totalIn - totalOut;
+    }
+    return transactions.reduce((acc, curr) => curr.type === 'in' ? acc + Number(curr.amount || 0) : acc - Number(curr.amount || 0), 0);
+  }, [latestKasSession, transactions]);
   const formatRupiah = (number: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number);
   const nextAgenda = [...agendas].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).find(a => new Date(a.date) >= new Date()) || agendas[0];
 
@@ -494,11 +563,11 @@ export default function BaniSumadiApp() {
         {/* MAIN CONTENT AREA */}
         <main className="flex-1 overflow-y-auto relative bg-gray-50">
           <div className="p-4 h-full">
-             {activeTab === 'dash' && <DashboardTab members={members} totalKas={totalKas} nextAgenda={nextAgenda} formatRupiah={formatRupiah} sliderImages={sliderImages} isAdmin={authRole === 'admin'} showToast={showToast} onNavigateTab={setActiveTab} />}
+             {activeTab === 'dash' && <DashboardTab members={members} totalKas={totalKas} latestKasTitle={latestKasSession?.title} nextAgenda={nextAgenda} formatRupiah={formatRupiah} sliderImages={sliderImages} isAdmin={authRole === 'admin'} showToast={showToast} onNavigateTab={setActiveTab} />}
              {activeTab === 'pohon' && <PohonSilsilahTab members={members} showToast={showToast} onNavigateTab={setActiveTab} />}
              {activeTab === 'anggota' && <AnggotaTab members={members} isAdmin={authRole === 'admin'} showToast={showToast} onNavigateTab={setActiveTab} />}
              {activeTab === 'agenda' && <AgendaTab agendas={agendas} isAdmin={authRole === 'admin'} showToast={showToast} />}
-             {activeTab === 'kas' && <KasTab transactions={transactions} totalKas={totalKas} formatRupiah={formatRupiah} isAdmin={authRole === 'admin'} showToast={showToast} />}
+             {activeTab === 'kas' && <KasTab kasSessions={kasSessions} legacyTransactions={transactions} totalKas={totalKas} formatRupiah={formatRupiah} isAdmin={authRole === 'admin'} showToast={showToast} />}
              {activeTab === 'iuran' && <IuranTab iuranSessions={iuranSessions} formatRupiah={formatRupiah} isAdmin={authRole === 'admin'} showToast={showToast} />}
           </div>
         </main>
@@ -604,6 +673,7 @@ function AdminLoginModal({ onLoginSuccess, onClose }: { onLoginSuccess: () => vo
 function DashboardTab({ 
   members, 
   totalKas, 
+  latestKasTitle,
   nextAgenda, 
   formatRupiah, 
   sliderImages, 
@@ -613,6 +683,7 @@ function DashboardTab({
 }: { 
   members: Member[]; 
   totalKas: number; 
+  latestKasTitle?: string;
   nextAgenda?: Agenda; 
   formatRupiah: (n: number) => string; 
   sliderImages: SliderImage[]; 
@@ -676,7 +747,9 @@ function DashboardTab({
           </div>
           <div className="my-1 z-10">
             <h2 className="text-xl font-black break-words leading-tight">{formatRupiah(totalKas)}</h2>
-            <p className="text-[9px] text-green-100/80 font-medium mt-0.5">Buka buku kas & transaksi</p>
+            <p className="text-[9px] text-green-100/85 font-medium mt-0.5 truncate" title={latestKasTitle ? `Saldo terbaru • ${latestKasTitle}` : 'Buka buku kas & transaksi'}>
+              {latestKasTitle ? `• ${latestKasTitle}` : 'Buka buku kas & transaksi'}
+            </p>
           </div>
           <Wallet className="absolute -right-3 -bottom-3 opacity-15 w-20 h-20 group-hover:scale-110 group-hover:opacity-25 transition-all duration-300 pointer-events-none" />
         </div>
@@ -1500,8 +1573,12 @@ function buildFullProfileData(
   spouseObj?: Spouse
 ): ProfileDetailData {
   const sumadi = allMembers.find(m => m.id === 1) || allMembers[0];
-  const wife1 = allMembers.find(m => m.id === 2);
-  const wife2 = allMembers.find(m => m.id === 3);
+  const wife1 = allMembers.find(m => m.name.toLowerCase().includes('munasikah')) || 
+                allMembers.find(m => m.branch === 'istri1' && m.spouseOfId === 1) ||
+                allMembers.find(m => m.id === 3);
+  const wife2 = allMembers.find(m => m.name.toLowerCase().includes('masripah')) || 
+                allMembers.find(m => m.branch === 'istri2' && m.spouseOfId === 1) ||
+                allMembers.find(m => m.id === 2);
 
   if (!isSpouse) {
     const isMale = member.gender === 'L';
@@ -1511,9 +1588,9 @@ function buildFullProfileData(
     let subtitle = 'Anggota Keluarga';
     if (member.id === 1) {
       subtitle = 'Pemuncak Silsilah (Akar Utama)';
-    } else if (member.id === 2) {
+    } else if (member.name.toLowerCase().includes('munasikah') || (wife1 && member.id === wife1.id)) {
       subtitle = 'Istri Pertama Mbah KH. Sumadi';
-    } else if (member.id === 3) {
+    } else if (member.name.toLowerCase().includes('masripah') || (wife2 && member.id === wife2.id)) {
       subtitle = 'Istri Kedua Mbah KH. Sumadi';
     } else if (member.parentId) {
       const pName = getMemberParentName(member, allMembers);
@@ -1525,13 +1602,13 @@ function buildFullProfileData(
     // Children
     let children: Member[] = [];
     if (member.id === 1) {
-      children = allMembers.filter(m => (m.parentId === 1 || m.parentId === 2 || m.parentId === 3) && m.relationType !== 'spouse' && m.id !== 1 && m.id !== 2 && m.id !== 3);
-    } else if (member.id === 2) {
-      children = allMembers.filter(m => (m.parentId === 2 || (m.parentId === 1 && (m.motherId === 2 || m.branch === 'istri1'))) && m.relationType !== 'spouse' && m.id !== 1 && m.id !== 2 && m.id !== 3);
-    } else if (member.id === 3) {
-      children = allMembers.filter(m => (m.parentId === 3 || (m.parentId === 1 && (m.motherId === 3 || m.branch === 'istri2'))) && m.relationType !== 'spouse' && m.id !== 1 && m.id !== 2 && m.id !== 3);
+      children = allMembers.filter(m => (m.parentId === 1 || (wife1 && m.parentId === wife1.id) || (wife2 && m.parentId === wife2.id)) && m.relationType !== 'spouse' && m.id !== 1 && m.id !== wife1?.id && m.id !== wife2?.id);
+    } else if (member.name.toLowerCase().includes('munasikah') || (wife1 && member.id === wife1.id)) {
+      children = allMembers.filter(m => ((wife1 && m.parentId === wife1.id) || (m.parentId === 1 && ((wife1 && m.motherId === wife1.id) || m.branch === 'istri1'))) && m.relationType !== 'spouse' && m.id !== 1 && m.id !== wife1?.id && m.id !== wife2?.id);
+    } else if (member.name.toLowerCase().includes('masripah') || (wife2 && member.id === wife2.id)) {
+      children = allMembers.filter(m => ((wife2 && m.parentId === wife2.id) || (m.parentId === 1 && ((wife2 && m.motherId === wife2.id) || m.branch === 'istri2'))) && m.relationType !== 'spouse' && m.id !== 1 && m.id !== wife1?.id && m.id !== wife2?.id);
     } else {
-      children = allMembers.filter(m => (m.parentId === member.id || m.motherId === member.id) && m.relationType !== 'spouse' && m.id !== 1 && m.id !== 2 && m.id !== 3);
+      children = allMembers.filter(m => (m.parentId === member.id || m.motherId === member.id) && m.relationType !== 'spouse' && m.id !== 1 && m.id !== wife1?.id && m.id !== wife2?.id);
     }
 
     // Marital status
@@ -1543,8 +1620,8 @@ function buildFullProfileData(
     const relations: FamilyRelationItem[] = [];
 
     // 1. Ayah
-    if (member.id !== 1 && member.id !== 2 && member.id !== 3) {
-      if (member.parentId === 1 || member.parentId === 2 || member.parentId === 3) {
+    if (member.id !== 1 && member.id !== wife1?.id && member.id !== wife2?.id) {
+      if (member.parentId === 1 || (wife1 && member.parentId === wife1.id) || (wife2 && member.parentId === wife2.id) || member.branch === 'istri1' || member.branch === 'istri2') {
         if (sumadi) {
           relations.push({
             relation: 'Ayah',
@@ -1573,8 +1650,11 @@ function buildFullProfileData(
     }
 
     // 2. Ibu
-    if (member.id !== 1 && member.id !== 2 && member.id !== 3) {
-      if (member.parentId === 2 || (member.parentId === 1 && (member.motherId === 2 || member.branch === 'istri1'))) {
+    if (member.id !== 1 && member.id !== wife1?.id && member.id !== wife2?.id) {
+      const isMunasikahDesc = (wife1 && member.parentId === wife1.id) || (member.parentId === 1 && ((wife1 && member.motherId === wife1.id) || member.branch === 'istri1')) || (member.branch === 'istri1' && (!member.parentId || member.parentId === 1 || member.parentId === wife1?.id));
+      const isMasripahDesc = (wife2 && member.parentId === wife2.id) || (member.parentId === 1 && ((wife2 && member.motherId === wife2.id) || member.branch === 'istri2')) || (member.branch === 'istri2' && (!member.parentId || member.parentId === 1 || member.parentId === wife2?.id));
+
+      if (isMunasikahDesc) {
         if (wife1) {
           relations.push({
             relation: 'Ibu',
@@ -1585,7 +1665,7 @@ function buildFullProfileData(
             targetPerson: { member: wife1, isSpouse: false }
           });
         }
-      } else if (member.parentId === 3 || (member.parentId === 1 && (member.motherId === 3 || member.branch === 'istri2'))) {
+      } else if (isMasripahDesc) {
         if (wife2) {
           relations.push({
             relation: 'Ibu',
@@ -1895,16 +1975,18 @@ function PohonSilsilahTab({
   }, [members]);
 
   // 2. Deteksi Kedua Istri Mbah Sumadi
+  // Mbah Munasikah adalah ISTRI PERTAMA (Istri 1)
   const wife1 = useMemo(() => {
-    return members.find(m => m.id === 2) || 
-           members.find(m => m.spouseOfId === 1 && (m.name.toLowerCase().includes('masripah') || m.name.toLowerCase().includes('aminah') || m.name.toLowerCase().includes('istri 1') || m.branch === 'istri1')) ||
-           members.find(m => m.name.toLowerCase().includes('masripah') || m.name.toLowerCase().includes('aminah') || m.name.toLowerCase().includes('istri 1'));
+    return members.find(m => m.name.toLowerCase().includes('munasikah')) || 
+           members.find(m => m.spouseOfId === 1 && (m.branch === 'istri1' || m.order === 1)) ||
+           members.find(m => m.id === 3);
   }, [members]);
 
+  // Mbah Masripah adalah ISTRI KEDUA (Istri 2)
   const wife2 = useMemo(() => {
-    return members.find(m => m.id === 3) || 
-           members.find(m => m.spouseOfId === 1 && (m.name.toLowerCase().includes('munasikah') || m.name.toLowerCase().includes('yanti') || m.name.toLowerCase().includes('istri 2') || m.branch === 'istri2')) ||
-           members.find(m => m.name.toLowerCase().includes('munasikah') || m.name.toLowerCase().includes('yanti') || m.name.toLowerCase().includes('istri 2'));
+    return members.find(m => m.name.toLowerCase().includes('masripah')) || 
+           members.find(m => m.spouseOfId === 1 && (m.branch === 'istri2' || m.order === 2)) ||
+           members.find(m => m.id === 2);
   }, [members]);
 
   // 3. Sub-tree Builder untuk Keturunan Masing-Masing Istri
@@ -1914,17 +1996,17 @@ function PohonSilsilahTab({
         // Pasangan terikat secara horizontal di samping anggotanya, tidak sebagai anak di pohon
         if (m.relationType === 'spouse') return false;
         // Mbah Sumadi, Istri 1, dan Istri 2 bukan anak
-        if (m.id === 1 || m.id === 2 || m.id === 3) return false;
+        if (m.id === 1 || (wife1 && m.id === wife1.id) || (wife2 && m.id === wife2.id)) return false;
 
         if (isWifeBranch === 1) {
-          if (m.parentId === (wife1?.id ?? 2)) return true;
-          if (m.parentId === 1 && (m.motherId === (wife1?.id ?? 2) || m.branch === 'istri1')) return true;
+          if (wife1 && m.parentId === wife1.id) return true;
+          if (m.parentId === 1 && ((wife1 && m.motherId === wife1.id) || m.branch === 'istri1')) return true;
           return false;
         }
 
         if (isWifeBranch === 2) {
-          if (m.parentId === (wife2?.id ?? 3)) return true;
-          if (m.parentId === 1 && (m.motherId === (wife2?.id ?? 3) || m.branch === 'istri2')) return true;
+          if (wife2 && m.parentId === wife2.id) return true;
+          if (m.parentId === 1 && ((wife2 && m.motherId === wife2.id) || m.branch === 'istri2')) return true;
           return false;
         }
 
@@ -1960,12 +2042,12 @@ function PohonSilsilahTab({
   const getParentLabel = (node: Member, isSpouse: boolean): string => {
     if (isSpouse) return '-';
     if (node.id === 1) return 'Pemuncak Silsilah (Akar Utama)';
-    if (node.id === 2 || node.id === 3) return '-';
-    if (node.parentId === (wife1?.id ?? 2) || (node.parentId === 1 && (node.motherId === (wife1?.id ?? 2) || node.branch === 'istri1'))) {
-      return `Mbah KH. Sumadi & ${wife1 ? wife1.name : 'Mbah Masripah (Istri 1)'}`;
+    if (node.id === (wife1?.id ?? 3) || node.id === (wife2?.id ?? 2)) return '-';
+    if ((wife1 && node.parentId === wife1.id) || (node.parentId === 1 && (node.motherId === wife1?.id || node.branch === 'istri1'))) {
+      return `Mbah KH. Sumadi & ${wife1 ? wife1.name : 'Mbah Munasikah (Istri 1)'}`;
     }
-    if (node.parentId === (wife2?.id ?? 3) || (node.parentId === 1 && (node.motherId === (wife2?.id ?? 3) || node.branch === 'istri2'))) {
-      return `Mbah KH. Sumadi & ${wife2 ? wife2.name : 'Mbah Munasikah (Istri 2)'}`;
+    if ((wife2 && node.parentId === wife2.id) || (node.parentId === 1 && (node.motherId === wife2?.id || node.branch === 'istri2'))) {
+      return `Mbah KH. Sumadi & ${wife2 ? wife2.name : 'Mbah Masripah (Istri 2)'}`;
     }
     const parent = members.find(m => m.id === node.parentId);
     if (!parent) return '-';
@@ -2012,26 +2094,28 @@ function PohonSilsilahTab({
         {sumadi ? (
           <div className="relative flex flex-col items-center">
             
-            {/* TAMPILAN SEMUA CABANG: ISTRI 2 (KIRI) ━━ MBAH SUMADI (TENGAH) ━━ ISTRI 1 (KANAN) */}
+            {/* TAMPILAN SEMUA CABANG: ISTRI 1 (KIRI) ━━ MBAH SUMADI (TENGAH) ━━ ISTRI 2 (KANAN) */}
             <div className="relative flex justify-center items-start pt-2">
                 
-                {/* CABANG KIRI: KETURUNAN PERNIKAHAN MBAH MUNASIKAH & MBAH KH. SUMADI */}
+                {/* CABANG KIRI: KETURUNAN PERNIKAHAN MBAH MUNASIKAH (ISTRI 1) & MBAH KH. SUMADI */}
                 <div className="relative flex flex-col items-center">
                   
                   {/* BARIS SEJAJAR ATAS KIRI: KARTU MBAH MUNASIKAH + GARIS PERNIKAHAN MENUJU TENGAH */}
                   <div className="relative flex items-center justify-end w-full">
-                    {/* Kartu Mbah Munasikah (Istri Kedua di Kiri) */}
+                    {/* Kartu Mbah Munasikah (Istri Pertama di Kiri) */}
                     <div className="flex-shrink-0 z-20">
-                      {wife2 ? (
+                      {wife1 ? (
                         <PersonBox
-                          name={wife2.name}
-                          gender={wife2.gender}
-                          isAlive={wife2.isAlive}
-                          photo={wife2.photo}
-                          onClick={(e) => { e.stopPropagation(); handleProfileClick(wife2, false); }}
+                          name={wife1.name}
+                          gender={wife1.gender}
+                          isAlive={wife1.isAlive}
+                          photo={wife1.photo}
+                          label="Istri 1"
+                          badgeColor="bg-purple-100 text-purple-900 border-purple-300"
+                          onClick={(e) => { e.stopPropagation(); handleProfileClick(wife1, false); }}
                         />
                       ) : (
-                        <div className="p-3 bg-purple-900/60 rounded-2xl text-white text-xs">Mbah Munasikah</div>
+                        <div className="p-3 bg-purple-900/60 rounded-2xl text-white text-xs">Mbah Munasikah (Istri 1)</div>
                       )}
                     </div>
 
@@ -2048,20 +2132,20 @@ function PohonSilsilahTab({
                     {/* Banner Silsilah Keturunan Mbah Munasikah */}
                     <div className="mb-3 px-3 py-1 rounded-xl bg-purple-950/90 border border-purple-500/70 shadow-sm text-center">
                       <p className="text-[10px] font-black text-purple-200 uppercase tracking-wide">
-                        Keturunan Mbah Munasikah & Mbah KH. Sumadi
+                        Keturunan Mbah Munasikah & Mbah KH. Sumadi (Istri Pertama)
                       </p>
                       <p className="text-[8px] font-bold text-purple-300/80">
-                        {countDescendantsBranch(wife2Children)} Anggota Keturunan (Anak & Cucu)
+                        {countDescendantsBranch(wife1Children)} Anggota Keturunan (Anak & Cucu)
                       </p>
                     </div>
 
                     {/* Deretan Anak-anak & Cucu-cucu */}
-                    {wife2Children.length > 0 ? (
+                    {wife1Children.length > 0 ? (
                       <div className="flex justify-center items-start">
-                        {wife2Children.map((child, idx) => {
+                        {wife1Children.map((child, idx) => {
                           const isFirst = idx === 0;
-                          const isLast = idx === wife2Children.length - 1;
-                          const isOnly = wife2Children.length === 1;
+                          const isLast = idx === wife1Children.length - 1;
+                          const isOnly = wife1Children.length === 1;
 
                           return (
                             <div key={child.id} className="relative flex flex-col items-center px-2 sm:px-4">
@@ -2102,7 +2186,7 @@ function PohonSilsilahTab({
                   />
                 </div>
 
-                {/* CABANG KANAN: KETURUNAN PERNIKAHAN MBAH MASRIPAH & MBAH KH. SUMADI */}
+                {/* CABANG KANAN: KETURUNAN PERNIKAHAN MBAH MASRIPAH (ISTRI 2) & MBAH KH. SUMADI */}
                 <div className="relative flex flex-col items-center">
                   
                   {/* BARIS SEJAJAR ATAS KANAN: GARIS PERNIKAHAN + KARTU MBAH MASRIPAH */}
@@ -2111,18 +2195,20 @@ function PohonSilsilahTab({
                     <div className="flex-1 min-w-[110px] sm:min-w-[150px] h-[3.5px] bg-gradient-to-r from-emerald-400 via-amber-400 to-pink-400 self-center relative flex items-center justify-center">
                     </div>
 
-                    {/* Kartu Mbah Masripah (Istri Pertama di Kanan) */}
+                    {/* Kartu Mbah Masripah (Istri Kedua di Kanan) */}
                     <div className="flex-shrink-0 z-20">
-                      {wife1 ? (
+                      {wife2 ? (
                         <PersonBox
-                          name={wife1.name}
-                          gender={wife1.gender}
-                          isAlive={wife1.isAlive}
-                          photo={wife1.photo}
-                          onClick={(e) => { e.stopPropagation(); handleProfileClick(wife1, false); }}
+                          name={wife2.name}
+                          gender={wife2.gender}
+                          isAlive={wife2.isAlive}
+                          photo={wife2.photo}
+                          label="Istri 2"
+                          badgeColor="bg-pink-100 text-pink-900 border-pink-300"
+                          onClick={(e) => { e.stopPropagation(); handleProfileClick(wife2, false); }}
                         />
                       ) : (
-                        <div className="p-3 bg-pink-900/60 rounded-2xl text-white text-xs">Mbah Masripah</div>
+                        <div className="p-3 bg-pink-900/60 rounded-2xl text-white text-xs">Mbah Masripah (Istri 2)</div>
                       )}
                     </div>
                   </div>
@@ -2135,20 +2221,20 @@ function PohonSilsilahTab({
                     {/* Banner Silsilah Keturunan Mbah Masripah */}
                     <div className="mb-3 px-3 py-1 rounded-xl bg-pink-950/90 border border-pink-500/70 shadow-sm text-center">
                       <p className="text-[10px] font-black text-pink-200 uppercase tracking-wide">
-                        Keturunan Mbah Masripah & Mbah KH. Sumadi
+                        Keturunan Mbah Masripah & Mbah KH. Sumadi (Istri Kedua)
                       </p>
                       <p className="text-[8px] font-bold text-pink-300/80">
-                        {countDescendantsBranch(wife1Children)} Anggota Keturunan (Anak & Cucu)
+                        {countDescendantsBranch(wife2Children)} Anggota Keturunan (Anak & Cucu)
                       </p>
                     </div>
 
                     {/* Deretan Anak-anak & Cucu-cucu */}
-                    {wife1Children.length > 0 ? (
+                    {wife2Children.length > 0 ? (
                       <div className="flex justify-center items-start">
-                        {wife1Children.map((child, idx) => {
+                        {wife2Children.map((child, idx) => {
                           const isFirst = idx === 0;
-                          const isLast = idx === wife1Children.length - 1;
-                          const isOnly = wife1Children.length === 1;
+                          const isLast = idx === wife2Children.length - 1;
+                          const isOnly = wife2Children.length === 1;
 
                           return (
                             <div key={child.id} className="relative flex flex-col items-center px-2 sm:px-4">
@@ -3131,14 +3217,20 @@ function ModalFormAnggota({
     };
   });
 
-  // Pemilihan Orang Tua: default Mbah KH. Sumadi & Mbah Masripah ('2') untuk anggota baru
+  const munasikah = useMemo(() => members.find(m => m.name.toLowerCase().includes('munasikah')), [members]);
+  const masripah = useMemo(() => members.find(m => m.name.toLowerCase().includes('masripah')), [members]);
+
+  const munasikahId = munasikah ? munasikah.id : 3;
+  const masripahId = masripah ? masripah.id : 2;
+
+  // Pemilihan Orang Tua: default Mbah KH. Sumadi & Mbah Munasikah (Istri 1) untuk anggota baru
   const [selectedParentChoice, setSelectedParentChoice] = useState<string>(() => {
     if (member) {
-      if (member.id === 1 || member.id === 2 || member.id === 3) return '';
-      if (member.parentId === 2) return '2';
-      if (member.parentId === 3) return '3';
+      if (member.id === 1 || (munasikah && member.id === munasikah.id) || (masripah && member.id === masripah.id) || member.id === 2 || member.id === 3) return '';
+      if (member.parentId === munasikahId || member.motherId === munasikahId) return String(munasikahId);
+      if (member.parentId === masripahId || member.motherId === masripahId) return String(masripahId);
       if (member.parentId === 1) {
-        return (member.motherId === 3 || member.branch === 'istri2') ? '3' : '2';
+        return (member.motherId === masripahId || member.branch === 'istri2') ? String(masripahId) : String(munasikahId);
       }
       if (member.parentId) {
         const parentObj = members.find(m => m.id === member.parentId);
@@ -3160,10 +3252,10 @@ function ModalFormAnggota({
           return `${member.parentId}`;
         }
       }
-      if (member.motherId === 3 || member.branch === 'istri2' || member.id === 31 || member.id === 32) return '3';
-      return '2';
+      if (member.motherId === masripahId || member.branch === 'istri2') return String(masripahId);
+      return String(munasikahId);
     }
-    return '2';
+    return String(munasikahId);
   });
 
   // Daftar calon orang tua dari silsilah (bukan diri sendiri dan bukan pemuncak 1, 2, 3)
@@ -3171,17 +3263,19 @@ function ModalFormAnggota({
     return members.filter(m => 
       m.id !== formData.id && 
       m.id !== 1 && 
+      (!munasikah || m.id !== munasikah.id) &&
+      (!masripah || m.id !== masripah.id) &&
       m.id !== 2 && 
       m.id !== 3 && 
       m.relationType !== 'spouse'
     );
-  }, [members, formData.id]);
+  }, [members, formData.id, munasikah, masripah]);
 
-  const masripahParents = useMemo(() => {
+  const munasikahParents = useMemo(() => {
     return eligibleParents.filter(m => getMemberBranch(m, members) === 'istri1');
   }, [eligibleParents, members]);
 
-  const munasikahParents = useMemo(() => {
+  const masripahParents = useMemo(() => {
     return eligibleParents.filter(m => getMemberBranch(m, members) === 'istri2');
   }, [eligibleParents, members]);
 
@@ -3221,20 +3315,20 @@ function ModalFormAnggota({
     return options;
   };
 
-  const masripahOptions = useMemo(() => buildParentOptions(masripahParents), [masripahParents, members]);
   const munasikahOptions = useMemo(() => buildParentOptions(munasikahParents), [munasikahParents, members]);
+  const masripahOptions = useMemo(() => buildParentOptions(masripahParents), [masripahParents, members]);
 
   const selectedParentInfo = useMemo(() => {
     if (!selectedParentChoice) return null;
-    if (selectedParentChoice === '2') {
+    if (selectedParentChoice === String(munasikahId) || selectedParentChoice === '3' || selectedParentChoice === 'munasikah') {
       return {
-        label: 'Mbah KH. Sumadi & Mbah Masripah (Istri 1)',
+        label: `Mbah KH. Sumadi & ${munasikah ? munasikah.name : 'Mbah Munasikah'} (Istri 1)`,
         branch: 'istri1' as const
       };
     }
-    if (selectedParentChoice === '3') {
+    if (selectedParentChoice === String(masripahId) || selectedParentChoice === '2' || selectedParentChoice === 'masripah') {
       return {
-        label: 'Mbah KH. Sumadi & Mbah Munasikah (Istri 2)',
+        label: `Mbah KH. Sumadi & ${masripah ? masripah.name : 'Mbah Masripah'} (Istri 2)`,
         branch: 'istri2' as const
       };
     }
@@ -3260,7 +3354,7 @@ function ModalFormAnggota({
       label: p.name,
       branch: getMemberBranch(p, members)
     };
-  }, [selectedParentChoice, members]);
+  }, [selectedParentChoice, members, munasikah, masripah, munasikahId, masripahId]);
 
   // State untuk multi-pasangan
   const [spousesList, setSpousesList] = useState<Spouse[]>(() => {
@@ -3398,23 +3492,24 @@ function ModalFormAnggota({
         parentId = null;
         relationType = member?.id === 1 ? 'child' : 'spouse';
         spouseOfId = member?.id === 1 ? null : 1;
-        memberBranch = member?.id === 3 ? 'istri2' : 'istri1';
-        motherId = member?.id === 3 ? 3 : 2;
+        const isMunasikah = member?.name?.toLowerCase().includes('munasikah') || member?.id === munasikahId;
+        memberBranch = isMunasikah ? 'istri1' : 'istri2';
+        motherId = isMunasikah ? munasikahId : masripahId;
       } else {
         relationType = 'child';
         spouseOfId = null;
 
-        if (selectedParentChoice === '2') {
-          parentId = 2;
-          motherId = 2;
+        if (selectedParentChoice === String(munasikahId) || selectedParentChoice === '3' || selectedParentChoice === 'munasikah') {
+          parentId = munasikahId;
+          motherId = munasikahId;
           memberBranch = 'istri1';
-          parentSpouseName = 'Mbah Masripah';
+          parentSpouseName = munasikah ? munasikah.name : 'Mbah Munasikah';
           spouseIndex = 0;
-        } else if (selectedParentChoice === '3') {
-          parentId = 3;
-          motherId = 3;
+        } else if (selectedParentChoice === String(masripahId) || selectedParentChoice === '2' || selectedParentChoice === 'masripah') {
+          parentId = masripahId;
+          motherId = masripahId;
           memberBranch = 'istri2';
-          parentSpouseName = 'Mbah Munasikah';
+          parentSpouseName = masripah ? masripah.name : 'Mbah Masripah';
           spouseIndex = 1;
         } else if (selectedParentChoice) {
           if (selectedParentChoice.includes('_')) {
@@ -3431,7 +3526,7 @@ function ModalFormAnggota({
                 parentSpouseName = sps[sIdx].name;
                 motherId = (parentObj.gender === 'P' ? parentObj.id : (sps[sIdx].id ? Number(sps[sIdx].id) : null));
               } else {
-                motherId = parentObj.motherId || (memberBranch === 'istri2' ? 3 : 2);
+                motherId = parentObj.motherId || (memberBranch === 'istri2' ? masripahId : munasikahId);
               }
             }
           } else {
@@ -3440,12 +3535,12 @@ function ModalFormAnggota({
             const parentObj = members.find(m => m.id === pId);
             if (parentObj) {
               memberBranch = getMemberBranch(parentObj, members);
-              motherId = parentObj.motherId || (memberBranch === 'istri2' ? 3 : 2);
+              motherId = parentObj.motherId || (memberBranch === 'istri2' ? masripahId : munasikahId);
             }
           }
         } else {
-          parentId = 2;
-          motherId = 2;
+          parentId = munasikahId;
+          motherId = munasikahId;
           memberBranch = 'istri1';
         }
       }
@@ -3617,9 +3712,9 @@ function ModalFormAnggota({
                   <p className="text-[11px] text-emerald-800 font-medium leading-relaxed">
                     {member?.id === 1 
                       ? 'Mbah KH. Sumadi adalah pemuncak silsilah utama (posisi tengah sejajar).' 
-                      : member?.id === 2 
-                      ? 'Mbah Masripah adalah pemuncak silsilah (Istri Pertama, posisi kanan sejajar).' 
-                      : 'Mbah Munasikah adalah pemuncak silsilah (Istri Kedua, posisi kiri sejajar).'}
+                      : (member?.name?.toLowerCase().includes('munasikah') || (munasikah && member?.id === munasikah.id) || member?.id === 3) 
+                      ? 'Mbah Munasikah adalah pemuncak silsilah (Istri Pertama, posisi kiri sejajar).' 
+                      : 'Mbah Masripah adalah pemuncak silsilah (Istri Kedua, posisi kanan sejajar).'}
                   </p>
                 </div>
               </div>
@@ -3642,17 +3737,17 @@ function ModalFormAnggota({
                     <option value="">-- Pilih Orang Tua dari Silsilah Keluarga --</option>
                     
                     <optgroup label="👑 Generasi 1 (Anak Langsung Mbah KH. Sumadi)">
-                      <option value="2">
-                        🌸 Mbah KH. Sumadi & Mbah Masripah (Cabang Kanan / Istri 1)
+                      <option value={String(munasikahId)}>
+                        🌺 Mbah KH. Sumadi & Mbah Munasikah (Cabang Kiri / Istri 1)
                       </option>
-                      <option value="3">
-                        🌺 Mbah KH. Sumadi & Mbah Munasikah (Cabang Kiri / Istri 2)
+                      <option value={String(masripahId)}>
+                        🌸 Mbah KH. Sumadi & Mbah Masripah (Cabang Kanan / Istri 2)
                       </option>
                     </optgroup>
 
-                    {masripahOptions.length > 0 && (
-                      <optgroup label="👨‍👩‍👧 Keturunan Cabang Mbah Masripah (Kanan)">
-                        {masripahOptions.map(opt => (
+                    {munasikahOptions.length > 0 && (
+                      <optgroup label="👨‍👩‍👧 Keturunan Cabang Mbah Munasikah (Istri 1 / Kiri)">
+                        {munasikahOptions.map(opt => (
                           <option key={opt.value} value={opt.value}>
                             {opt.label}
                           </option>
@@ -3660,9 +3755,9 @@ function ModalFormAnggota({
                       </optgroup>
                     )}
 
-                    {munasikahOptions.length > 0 && (
-                      <optgroup label="👨‍👩‍👧 Keturunan Cabang Mbah Munasikah (Kiri)">
-                        {munasikahOptions.map(opt => (
+                    {masripahOptions.length > 0 && (
+                      <optgroup label="👨‍👩‍👧 Keturunan Cabang Mbah Masripah (Istri 2 / Kanan)">
+                        {masripahOptions.map(opt => (
                           <option key={opt.value} value={opt.value}>
                             {opt.label}
                           </option>
@@ -3679,9 +3774,9 @@ function ModalFormAnggota({
                         <p className="font-bold flex items-center gap-1.5">
                           <span>Posisi di Pohon Silsilah:</span>
                           <span className={`text-[9px] font-black px-1.5 py-0.2 rounded-md ${
-                            selectedParentInfo.branch === 'istri1' ? 'bg-pink-100 text-pink-800' : 'bg-purple-100 text-purple-800'
+                            selectedParentInfo.branch === 'istri1' ? 'bg-purple-100 text-purple-800' : 'bg-pink-100 text-pink-800'
                           }`}>
-                            {selectedParentInfo.branch === 'istri1' ? 'Cabang Kanan (Mbah Masripah)' : 'Cabang Kiri (Mbah Munasikah)'}
+                            {selectedParentInfo.branch === 'istri1' ? 'Cabang Kiri (Mbah Munasikah - Istri 1)' : 'Cabang Kanan (Mbah Masripah - Istri 2)'}
                           </span>
                         </p>
                         <p className="text-emerald-700 text-[10px] mt-0.5 font-medium">
@@ -4029,11 +4124,76 @@ function ModalFormAgenda({ agenda, showToast, onClose }: { agenda: Agenda | null
   );
 }
 
-function KasTab({ transactions, totalKas, formatRupiah, isAdmin, showToast }: { transactions: Transaction[]; totalKas: number; formatRupiah: (n: number) => string; isAdmin: boolean; showToast: (m: string, t?: 'success' | 'error') => void }) {
+function KasTab({ 
+  kasSessions, 
+  legacyTransactions,
+  totalKas, 
+  formatRupiah, 
+  isAdmin, 
+  showToast 
+}: { 
+  kasSessions: KasSession[]; 
+  legacyTransactions: Transaction[];
+  totalKas: number; 
+  formatRupiah: (n: number) => string; 
+  isAdmin: boolean; 
+  showToast: (m: string, t?: 'success' | 'error') => void 
+}) {
+  const sortedSessions = useMemo(() => {
+    return [...kasSessions].sort((a, b) => b.id - a.id);
+  }, [kasSessions]);
+
+  const [activeSid, setActiveSid] = useState<number | null>(() => {
+    return sortedSessions.length > 0 ? sortedSessions[0].id : null;
+  });
+
+  useEffect(() => {
+    if ((activeSid === null || !sortedSessions.some(s => s.id === activeSid)) && sortedSessions.length > 0) {
+      setActiveSid(sortedSessions[0].id);
+    }
+  }, [sortedSessions, activeSid]);
+
+  // If no kasSessions yet, fallback to a virtual session with legacyTransactions
+  const activeSession: KasSession | null = useMemo(() => {
+    if (kasSessions.length > 0) {
+      return kasSessions.find(s => s.id === activeSid) || sortedSessions[0] || null;
+    }
+    if (legacyTransactions.length > 0) {
+      return {
+        id: 1,
+        title: "Kas Utama Keluarga",
+        transactions: legacyTransactions
+      };
+    }
+    return null;
+  }, [kasSessions, activeSid, sortedSessions, legacyTransactions]);
+
+  const currentTransactions = activeSession?.transactions || [];
+
+  // Hitung pemasukan, pengeluaran, dan saldo bersih lembar ini
+  const inTransactions = currentTransactions.filter(t => t.type === 'in');
+  const outTransactions = currentTransactions.filter(t => t.type === 'out');
+
+  const totalIn = inTransactions.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+  const totalOut = outTransactions.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+  const saldoLembar = totalIn - totalOut;
+
+  // State Modal & Filter
+  const [filterType, setFilterType] = useState<'all' | 'in' | 'out'>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isNewSessOpen, setIsNewSessOpen] = useState(false);
+  const [isEditSessOpen, setIsEditSessOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Transaction | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [sessionToDelete, setSessionToDelete] = useState<number | null>(null);
   const [itemToDelete, setItemToDelete] = useState<number | null>(null);
+
+  const filteredTransactions = useMemo(() => {
+    const sorted = [...currentTransactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    if (filterType === 'in') return sorted.filter(t => t.type === 'in');
+    if (filterType === 'out') return sorted.filter(t => t.type === 'out');
+    return sorted;
+  }, [currentTransactions, filterType]);
 
   const handleDownloadJPEG = () => {
     const target = document.getElementById('kas-download-area');
@@ -4044,7 +4204,7 @@ function KasTab({ transactions, totalKas, formatRupiah, isAdmin, showToast }: { 
       if (h2c) {
         h2c(target, { backgroundColor: '#ffffff', scale: 2 }).then((canvas: HTMLCanvasElement) => {
           const link = document.createElement('a');
-          link.download = `Laporan_Kas.jpg`;
+          link.download = `Laporan_Kas_${activeSession?.title?.replace(/\s+/g, '_') || 'Keluarga'}.jpg`;
           link.href = canvas.toDataURL('image/jpeg');
           link.click();
           setIsDownloading(false);
@@ -4061,94 +4221,496 @@ function KasTab({ transactions, totalKas, formatRupiah, isAdmin, showToast }: { 
     } else capture();
   };
 
-  const executeDelete = async (id: number) => {
+  const executeDeleteSession = async (id: number) => {
     try {
-      await deleteDoc(getDocRef('transactions', id));
+      await deleteDoc(getDocRef('kasSessions', id));
+      setActiveSid(null);
+      setSessionToDelete(null);
+      showToast('Lembar riwayat kas berhasil dihapus dari Firebase', 'success');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, 'kasSessions');
+      showToast('Gagal menghapus lembar kas di Firebase', 'error');
+    }
+  };
+
+  const executeDeleteItem = async (transId: number) => {
+    if (!activeSession) return;
+    try {
+      const newTransactions = activeSession.transactions.filter(x => x.id !== transId);
+      await setDoc(getDocRef('kasSessions', activeSession.id), cleanFirestoreData({ ...activeSession, transactions: newTransactions }));
       setItemToDelete(null);
-      showToast('Transaksi berhasil dihapus dari Firebase', 'success');
-    } catch (err) { 
-      handleFirestoreError(err, OperationType.DELETE, 'transactions');
-      showToast('Gagal menghapus data di Firebase', 'error'); 
+      showToast('Transaksi berhasil dihapus dari lembar kas', 'success');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'kasSessions');
+      showToast('Gagal menghapus transaksi', 'error');
     }
   };
 
   return (
     <div className="space-y-4 pb-6">
-       <div className="flex justify-between items-center mb-2">
-         <h2 className="text-xl font-bold text-gray-800">Kas Keluarga</h2>
-         <button onClick={handleDownloadJPEG} disabled={isDownloading} className="bg-green-100 text-green-700 px-3 py-1.5 rounded-lg font-bold flex items-center text-[11px] cursor-pointer disabled:opacity-50"><Download size={14} className="mr-1.5"/> {isDownloading ? 'Menyimpan...' : 'Unduh JPEG'}</button>
-       </div>
-
-      <div id="kas-download-area" className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-        <div className="bg-green-600 p-6 text-white relative overflow-hidden">
-          <p className="text-[11px] font-semibold mb-1 opacity-90 tracking-wide uppercase">Total Saldo Kas</p>
-          <h2 className="text-3xl font-black break-words relative z-10">{formatRupiah(totalKas)}</h2>
-          <Wallet className="absolute -right-4 -bottom-4 opacity-20 w-36 h-36" />
+      {/* HEADER TAB */}
+      <div className="flex justify-between items-center mb-1">
+        <div>
+          <h2 className="text-xl font-bold text-gray-800">Kas Keuangan</h2>
+          <p className="text-[11px] text-gray-500">Kelola buku riwayat pemasukan & pengeluaran kas</p>
         </div>
-        <div className="px-5 py-3 bg-gray-50 border-b font-bold text-xs text-gray-500 uppercase">Riwayat Transaksi</div>
-        <div className="divide-y">
-          {transactions.sort((a,b)=>new Date(b.date).getTime()-new Date(a.date).getTime()).map(t => (
-            <div key={t.id} className="p-5 flex justify-between items-center">
-              <div className="flex-1 pr-4">
-                <p className="font-bold text-sm text-gray-800 truncate">{t.desc}</p>
-                <p className="text-[10px] text-gray-400 mt-0.5">{new Date(t.date).toLocaleDateString('id-ID')}</p>
+        {activeSession && (
+          <button 
+            onClick={handleDownloadJPEG} 
+            disabled={isDownloading} 
+            className="bg-green-100 hover:bg-green-200 text-green-800 px-3.5 py-2 rounded-xl font-bold flex items-center text-xs shadow-xs cursor-pointer disabled:opacity-50 transition"
+          >
+            <Download size={15} className="mr-1.5"/> {isDownloading ? 'Menyimpan...' : 'Unduh JPEG'}
+          </button>
+        )}
+      </div>
+
+      {/* SECTION: PILIH LEMBAR RIWAYAT TRANSAKSI */}
+      <div className="bg-white p-4 sm:p-5 rounded-2xl shadow-xs border border-gray-200/80 space-y-3">
+        <div className="flex justify-between items-center">
+          <p className="text-[10.5px] font-black text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+            <FileText size={14} className="text-green-600" /> Pilih Lembar Riwayat Transaksi:
+          </p>
+          <span className="text-[10px] bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-bold border border-green-200">
+            {kasSessions.length || (legacyTransactions.length > 0 ? 1 : 0)} Lembar
+          </span>
+        </div>
+
+        {kasSessions.length > 0 || legacyTransactions.length > 0 ? (
+          <div className="flex items-center gap-2">
+            <select 
+              className="flex-1 border-2 border-gray-200 focus:border-green-600 p-2.5 sm:p-3 rounded-xl text-xs sm:text-sm font-bold bg-gray-50 text-gray-800 outline-none truncate cursor-pointer transition shadow-2xs" 
+              value={activeSession?.id || ''} 
+              onChange={e => setActiveSid(Number(e.target.value))}
+            >
+              {sortedSessions.map(s => (
+                <option key={s.id} value={s.id}>
+                  📄 {s.title} ({s.transactions?.length || 0} Transaksi)
+                </option>
+              ))}
+              {sortedSessions.length === 0 && (
+                <option value={1}>📄 Kas Utama Keluarga ({legacyTransactions.length} Transaksi)</option>
+              )}
+            </select>
+            {isAdmin && activeSession && (
+              <div className="flex gap-1.5 border-l pl-2 flex-shrink-0">
+                <button 
+                  onClick={() => setIsEditSessOpen(true)} 
+                  className="p-2.5 sm:p-3 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-xl cursor-pointer border border-amber-200 transition" 
+                  title="Edit Nama Lembar Kas"
+                >
+                  <Edit2 size={16}/>
+                </button>
+                <button 
+                  onClick={() => setSessionToDelete(activeSession.id)} 
+                  className="p-2.5 sm:p-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl cursor-pointer border border-red-200 transition" 
+                  title="Hapus Lembar Kas Ini"
+                >
+                  <Trash2 size={16}/>
+                </button>
               </div>
-              <div className="text-right flex items-center">
-                <div className="mr-3">
-                  <p className={`font-bold text-[13px] ${t.type === 'in' ? 'text-green-600' : 'text-red-500'}`}>{t.type === 'in' ? '+' : '-'}{formatRupiah(t.amount)}</p>
-                </div>
-                {isAdmin && !isDownloading && (
-                  <div className="flex gap-1 border-l pl-3">
-                    <button onClick={() => {setEditingItem(t); setIsModalOpen(true);}} className="text-blue-500 bg-white border p-1.5 rounded-lg cursor-pointer"><Edit2 size={14}/></button>
-                    <button onClick={() => setItemToDelete(t.id)} className="text-red-500 bg-white border p-1.5 rounded-lg cursor-pointer"><Trash2 size={14}/></button>
-                  </div>
-                )}
+            )}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-400 italic text-center py-2">Belum ada lembar riwayat transaksi.</p>
+        )}
+
+        {isAdmin && (
+          <button 
+            onClick={() => setIsNewSessOpen(true)} 
+            className="w-full text-green-700 hover:text-green-800 bg-green-50 hover:bg-green-100 text-xs sm:text-sm font-bold py-3 rounded-xl border border-green-200 flex items-center justify-center gap-2 cursor-pointer transition shadow-2xs"
+          >
+            <FolderPlus size={16}/> Buat Lembar Baru Riwayat Transaksi
+          </button>
+        )}
+      </div>
+
+      {/* CARD 1: TOTAL SALDO KAS LEMBAR INI */}
+      <div className="bg-gradient-to-br from-green-600 via-emerald-700 to-green-800 rounded-2xl p-5 text-white shadow-md relative overflow-hidden flex flex-col justify-between">
+        <div className="flex justify-between items-start z-10">
+          <div>
+            <p className="text-[10px] font-bold tracking-wider uppercase text-green-100/90">
+              SALDO KAS BERSIH {activeSession ? `• ${activeSession.title}` : ''}
+            </p>
+            <h2 className="text-2xl sm:text-3xl font-black break-words mt-1">
+              {formatRupiah(saldoLembar)}
+            </h2>
+          </div>
+        </div>
+        <p className="text-[10px] text-green-100/80 font-medium mt-2 z-10">
+          Sisa saldo kas dari {currentTransactions.length} riwayat transaksi pada lembar ini
+        </p>
+        <Wallet className="absolute -right-3 -bottom-3 opacity-15 w-28 h-28 pointer-events-none" />
+      </div>
+
+      {/* CARD 2 & CARD 3: PEMISAHAN CARD PEMASUKAN DAN PENGELUARAN */}
+      <div className="grid grid-cols-2 gap-3">
+        {/* CARD PEMASUKAN SENDIRI */}
+        <div className="bg-emerald-50/90 border-2 border-emerald-200/80 rounded-2xl p-4 flex flex-col justify-between shadow-2xs relative overflow-hidden">
+          <div className="flex items-center justify-between z-10">
+            <span className="text-[10px] font-black text-emerald-800 uppercase tracking-wider">
+              PEMASUKAN (+)
+            </span>
+            <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-700 flex-shrink-0">
+              <TrendingUp size={16} />
+            </div>
+          </div>
+          <div className="my-2 z-10">
+            <h3 className="text-lg sm:text-xl font-black text-emerald-700 break-words leading-tight">
+              +{formatRupiah(totalIn)}
+            </h3>
+          </div>
+          <p className="text-[10px] font-bold text-emerald-600/90 z-10">
+            {inTransactions.length} Transaksi Masuk
+          </p>
+        </div>
+
+        {/* CARD PENGELUARAN SENDIRI */}
+        <div className="bg-rose-50/90 border-2 border-rose-200/80 rounded-2xl p-4 flex flex-col justify-between shadow-2xs relative overflow-hidden">
+          <div className="flex items-center justify-between z-10">
+            <span className="text-[10px] font-black text-rose-800 uppercase tracking-wider">
+              PENGELUARAN (-)
+            </span>
+            <div className="w-7 h-7 rounded-lg bg-rose-100 flex items-center justify-center text-rose-600 flex-shrink-0">
+              <TrendingDown size={16} />
+            </div>
+          </div>
+          <div className="my-2 z-10">
+            <h3 className="text-lg sm:text-xl font-black text-rose-600 break-words leading-tight">
+              -{formatRupiah(totalOut)}
+            </h3>
+          </div>
+          <p className="text-[10px] font-bold text-rose-500/90 z-10">
+            {outTransactions.length} Transaksi Keluar
+          </p>
+        </div>
+      </div>
+
+      {/* TOMBOL TAMBAH TRANSAKSI */}
+      {isAdmin && activeSession && !isDownloading && (
+        <button 
+          onClick={() => { setEditingItem(null); setIsModalOpen(true); }} 
+          className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3.5 rounded-2xl flex items-center justify-center shadow-md transition cursor-pointer text-sm"
+        >
+          <Plus size={18} className="mr-2"/> Tambah Transaksi Kas
+        </button>
+      )}
+
+      {/* DAFTAR RIWAYAT TRANSAKSI & AREA DOWNLOAD JPEG */}
+      {activeSession && (
+        <div id="kas-download-area" className="bg-white rounded-2xl shadow-sm border border-gray-200/90 overflow-hidden mt-3">
+          {/* HEADER CETAK */}
+          <div className="bg-green-700 p-5 text-white text-center">
+            <h3 className="font-black text-base sm:text-lg uppercase tracking-widest mb-1">
+              LAPORAN KAS KELUARGA
+            </h3>
+            <div className="inline-block bg-white/20 px-3.5 py-1 rounded-lg text-xs font-bold backdrop-blur-xs border border-white/30">
+              {activeSession.title}
+            </div>
+            <div className="mt-3 pt-3 border-t border-white/20 grid grid-cols-3 text-center text-[10px] sm:text-xs">
+              <div>
+                <p className="text-green-200 opacity-80">Pemasukan</p>
+                <p className="font-black text-green-100 mt-0.5">+{formatRupiah(totalIn)}</p>
+              </div>
+              <div className="border-x border-white/20">
+                <p className="text-rose-200 opacity-80">Pengeluaran</p>
+                <p className="font-black text-rose-100 mt-0.5">-{formatRupiah(totalOut)}</p>
+              </div>
+              <div>
+                <p className="text-white opacity-80">Sisa Kas</p>
+                <p className="font-black text-white mt-0.5">{formatRupiah(saldoLembar)}</p>
               </div>
             </div>
-          ))}
-          {transactions.length === 0 && <p className="p-8 text-center text-gray-400 text-xs font-medium">Belum ada riwayat keuangan.</p>}
+          </div>
+
+          {/* FILTER TABS (SEMUA, PEMASUKAN, PENGELUARAN) */}
+          <div className="flex border-b bg-gray-50/80 p-1.5 gap-1.5">
+            <button
+              onClick={() => setFilterType('all')}
+              className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition cursor-pointer ${
+                filterType === 'all' ? 'bg-white text-gray-800 shadow-xs border border-gray-200' : 'text-gray-500 hover:text-gray-800'
+              }`}
+            >
+              Semua ({currentTransactions.length})
+            </button>
+            <button
+              onClick={() => setFilterType('in')}
+              className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-1 ${
+                filterType === 'in' ? 'bg-emerald-50 text-emerald-800 shadow-xs border border-emerald-200' : 'text-emerald-700/70 hover:text-emerald-800'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Masuk ({inTransactions.length})
+            </button>
+            <button
+              onClick={() => setFilterType('out')}
+              className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-1 ${
+                filterType === 'out' ? 'bg-rose-50 text-rose-800 shadow-xs border border-rose-200' : 'text-rose-600/70 hover:text-rose-800'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-rose-500"></span> Keluar ({outTransactions.length})
+            </button>
+          </div>
+
+          {/* LIST TRANSAKSI */}
+          <div className="divide-y divide-gray-100">
+            {filteredTransactions.map(t => (
+              <div key={t.id} className="p-4 sm:p-5 flex justify-between items-center hover:bg-gray-50/80 transition">
+                <div className="flex items-center gap-3 flex-1 min-w-0 pr-3">
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                    t.type === 'in' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-600'
+                  }`}>
+                    {t.type === 'in' ? <ArrowDownLeft size={18} /> : <ArrowUpRight size={18} />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-xs sm:text-sm text-gray-800 truncate">{t.desc}</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5 flex items-center gap-1.5">
+                      <span>{new Date(t.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                      <span className={`px-1.5 py-0.2 rounded text-[8.5px] font-black uppercase ${
+                        t.type === 'in' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-600'
+                      }`}>
+                        {t.type === 'in' ? 'Pemasukan' : 'Pengeluaran'}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="text-right flex items-center flex-shrink-0">
+                  <div className="mr-2 sm:mr-3">
+                    <p className={`font-black text-xs sm:text-sm ${t.type === 'in' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {t.type === 'in' ? '+' : '-'}{formatRupiah(t.amount)}
+                    </p>
+                  </div>
+                  {isAdmin && !isDownloading && (
+                    <div className="flex gap-1 border-l pl-2 sm:pl-3">
+                      <button 
+                        onClick={() => { setEditingItem(t); setIsModalOpen(true); }} 
+                        className="text-amber-600 bg-amber-50 hover:bg-amber-100 border border-amber-200 p-1.5 rounded-lg cursor-pointer transition"
+                        title="Edit Transaksi"
+                      >
+                        <Edit2 size={13}/>
+                      </button>
+                      <button 
+                        onClick={() => setItemToDelete(t.id)} 
+                        className="text-red-500 bg-red-50 hover:bg-red-100 border border-red-200 p-1.5 rounded-lg cursor-pointer transition"
+                        title="Hapus Transaksi"
+                      >
+                        <Trash2 size={13}/>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {filteredTransactions.length === 0 && (
+              <p className="p-8 text-center text-gray-400 text-xs font-medium italic">
+                {filterType === 'in' ? 'Tidak ada transaksi pemasukan.' : filterType === 'out' ? 'Tidak ada transaksi pengeluaran.' : 'Belum ada catatan riwayat transaksi pada lembar ini.'}
+              </p>
+            )}
+          </div>
+
+          <div className="py-2.5 text-center bg-gray-50 border-t">
+            <p className="text-[8px] text-gray-400 uppercase font-black tracking-widest">
+              Keluarga Besar KH. SUMADI &bull; by Falah
+            </p>
+          </div>
         </div>
-        <div className="py-2.5 text-center bg-gray-50 border-t"><p className="text-[8px] text-gray-400 uppercase font-black tracking-widest">Keluarga Besar KH. SUMADI &bull; by Falah</p></div>
-      </div>
-      {isAdmin && !isDownloading && <button onClick={() => {setEditingItem(null); setIsModalOpen(true);}} className="w-full bg-green-600 text-white font-bold py-3.5 rounded-xl flex items-center justify-center shadow-md hover:bg-green-700 transition mt-4 cursor-pointer"><Plus size={18} className="mr-2"/> Tambah Transaksi</button>}
-      
-      {isModalOpen && <ModalFormKas item={editingItem} showToast={showToast} onClose={() => setIsModalOpen(false)} />}
-      {itemToDelete !== null && <ConfirmModal title="Hapus Riwayat Kas" message="Yakin menghapus catatan transaksi ini? Total uang kas akan terhitung ulang di Firebase." onCancel={() => setItemToDelete(null)} onConfirm={() => executeDelete(itemToDelete)} />}
+      )}
+
+      {/* MODAL FORM TAMBAH / EDIT TRANSAKSI KAS */}
+      {isModalOpen && activeSession && (
+        <ModalFormKas 
+          item={editingItem} 
+          activeSession={activeSession}
+          showToast={showToast} 
+          onClose={() => setIsModalOpen(false)} 
+        />
+      )}
+
+      {/* MODAL BUAT LEMBAR KAS BARU */}
+      {isNewSessOpen && (
+        <ModalSess 
+          title="" 
+          label="Buat Lembar Riwayat Transaksi Baru" 
+          onClose={() => setIsNewSessOpen(false)} 
+          onSave={async (t) => { 
+            try {
+              const n: KasSession = { id: Date.now(), title: t, transactions: [] }; 
+              await setDoc(getDocRef('kasSessions', n.id), cleanFirestoreData(n)); 
+              setActiveSid(n.id); 
+              setIsNewSessOpen(false); 
+              showToast(`Lembar transaksi "${t}" berhasil dibuat di Firebase`, 'success'); 
+            } catch (err) { 
+              handleFirestoreError(err, OperationType.WRITE, 'kasSessions');
+              showToast('Gagal membuat lembar transaksi', 'error'); 
+            }
+          }} 
+        />
+      )}
+
+      {/* MODAL EDIT NAMA LEMBAR KAS */}
+      {isEditSessOpen && activeSession && (
+        <ModalSess 
+          title={activeSession.title || ''} 
+          label="Edit Nama Lembar Riwayat Transaksi" 
+          onClose={() => setIsEditSessOpen(false)} 
+          onSave={async (t) => { 
+            try {
+              await setDoc(getDocRef('kasSessions', activeSession.id), cleanFirestoreData({ ...activeSession, title: t })); 
+              setIsEditSessOpen(false); 
+              showToast('Nama lembar transaksi berhasil diubah di Firebase', 'success'); 
+            } catch (err) { 
+              handleFirestoreError(err, OperationType.WRITE, 'kasSessions');
+              showToast('Gagal mengubah nama lembar', 'error'); 
+            }
+          }} 
+        />
+      )}
+
+      {/* MODAL KONFIRMASI HAPUS LEMBAR KAS */}
+      {sessionToDelete !== null && (
+        <ConfirmModal 
+          title="Hapus Lembar Riwayat Kas" 
+          message="Yakin menghapus seluruh lembar transaksi ini dari Firebase? Semua riwayat pemasukan & pengeluaran di lembar ini akan hilang permanen." 
+          onCancel={() => setSessionToDelete(null)} 
+          onConfirm={() => executeDeleteSession(sessionToDelete)} 
+        />
+      )}
+
+      {/* MODAL KONFIRMASI HAPUS BARIS TRANSAKSI */}
+      {itemToDelete !== null && (
+        <ConfirmModal 
+          title="Hapus Catatan Transaksi" 
+          message="Yakin ingin menghapus catatan transaksi ini dari lembar kas?" 
+          onCancel={() => setItemToDelete(null)} 
+          onConfirm={() => executeDeleteItem(itemToDelete)} 
+        />
+      )}
     </div>
   );
 }
 
-function ModalFormKas({ item, showToast, onClose }: { item: Transaction | null; showToast: (m: string, t?: 'success' | 'error') => void; onClose: () => void }) {
-  const [formData, setFormData] = useState<Partial<Transaction>>(item || { date: new Date().toISOString().split('T')[0], type: 'in', amount: 0, desc: '' });
+function ModalFormKas({ 
+  item, 
+  activeSession,
+  showToast, 
+  onClose 
+}: { 
+  item: Transaction | null; 
+  activeSession: KasSession;
+  showToast: (m: string, t?: 'success' | 'error') => void; 
+  onClose: () => void;
+}) {
+  const [formData, setFormData] = useState<Partial<Transaction>>(
+    item || { 
+      date: new Date().toISOString().split('T')[0], 
+      type: 'in', 
+      amount: '' as any, 
+      desc: '' 
+    }
+  );
   
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.desc || !formData.amount) {
+      showToast('Keterangan dan nominal harus diisi', 'error');
+      return;
+    }
     try {
-      const id = item ? item.id : Date.now();
-      await setDoc(getDocRef('transactions', id), cleanFirestoreData({ ...formData, id, amount: Number(formData.amount) }));
-      showToast('Transaksi berhasil disimpan di Firebase', 'success');
+      const payload: Transaction = {
+        id: item ? item.id : Date.now(),
+        date: formData.date || new Date().toISOString().split('T')[0],
+        type: formData.type || 'in',
+        amount: Number(formData.amount),
+        desc: formData.desc.trim()
+      };
+
+      let newTransactions: Transaction[];
+      if (item) {
+        newTransactions = (activeSession.transactions || []).map(x => x.id === item.id ? payload : x);
+      } else {
+        newTransactions = [...(activeSession.transactions || []), payload];
+      }
+
+      await setDoc(getDocRef('kasSessions', activeSession.id), cleanFirestoreData({ ...activeSession, transactions: newTransactions }));
+      showToast('Transaksi kas berhasil disimpan ke Firebase', 'success');
       onClose();
     } catch (err) { 
-      handleFirestoreError(err, OperationType.WRITE, 'transactions');
+      handleFirestoreError(err, OperationType.WRITE, 'kasSessions');
       showToast('Gagal menyimpan ke Firebase', 'error'); 
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/60 z-[150] flex items-center justify-center p-4 animate-fade-in">
       <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl">
-        <div className="bg-green-700 p-4 text-white font-bold text-sm">{item ? 'Edit Transaksi Kas' : 'Catat Keuangan'}</div>
+        <div className="bg-gradient-to-r from-green-700 to-emerald-700 p-4 text-white font-bold text-sm flex items-center justify-between">
+          <span>{item ? 'Edit Transaksi Kas' : 'Catat Transaksi Kas Baru'}</span>
+          <button onClick={onClose} className="p-1 hover:bg-white/20 rounded-full transition cursor-pointer"><X size={18}/></button>
+        </div>
         <form onSubmit={handleSave} className="p-5 space-y-4">
           <div className="flex bg-gray-100 rounded-xl p-1.5 border shadow-inner">
-            <button type="button" onClick={() => setFormData({...formData, type: 'in'})} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${formData.type === 'in' ? 'bg-white text-green-600 shadow-md' : 'text-gray-500'}`}>Pemasukan (+)</button>
-            <button type="button" onClick={() => setFormData({...formData, type: 'out'})} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${formData.type === 'out' ? 'bg-white text-red-600 shadow-md' : 'text-gray-500'}`}>Pengeluaran (-)</button>
+            <button 
+              type="button" 
+              onClick={() => setFormData({...formData, type: 'in'})} 
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                formData.type === 'in' ? 'bg-white text-emerald-700 shadow-sm border border-emerald-200' : 'text-gray-500'
+              }`}
+            >
+              <TrendingUp size={14} /> Pemasukan (+)
+            </button>
+            <button 
+              type="button" 
+              onClick={() => setFormData({...formData, type: 'out'})} 
+              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                formData.type === 'out' ? 'bg-white text-rose-600 shadow-sm border border-rose-200' : 'text-gray-500'
+              }`}
+            >
+              <TrendingDown size={14} /> Pengeluaran (-)
+            </button>
           </div>
-          <input type="date" required className="w-full border-2 p-3 rounded-xl text-sm outline-none focus:border-green-500" value={formData.date || ''} onChange={e=>setFormData({...formData, date:e.target.value})} />
-          <input type="number" placeholder="Nominal (Rp)" required className="w-full border-2 p-3 rounded-xl text-xl font-black outline-none focus:border-green-500" value={formData.amount || ''} onChange={e=>setFormData({...formData, amount: Number(e.target.value)})} />
-          <input placeholder="Keterangan Transaksi" required className="w-full border-2 p-3 rounded-xl text-sm outline-none focus:border-green-500" value={formData.desc || ''} onChange={e=>setFormData({...formData, desc:e.target.value})} />
+
+          <div>
+            <label className="block text-[11px] font-bold text-gray-600 mb-1">Tanggal Transaksi</label>
+            <input 
+              type="date" 
+              required 
+              className="w-full border-2 border-gray-200 focus:border-green-600 p-2.5 rounded-xl text-xs font-semibold outline-none bg-gray-50" 
+              value={formData.date || ''} 
+              onChange={e=>setFormData({...formData, date: e.target.value})} 
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-gray-600 mb-1">Nominal (Rp)</label>
+            <input 
+              type="number" 
+              placeholder="Contoh: 500000" 
+              required 
+              className="w-full border-2 border-gray-200 focus:border-green-600 p-3 rounded-xl text-xl font-black text-gray-900 outline-none" 
+              value={formData.amount || ''} 
+              onChange={e=>setFormData({...formData, amount: e.target.value as any})} 
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-gray-600 mb-1">Keterangan Transaksi</label>
+            <input 
+              placeholder="Misal: Iuran bulanan dari Pak Budi" 
+              required 
+              className="w-full border-2 border-gray-200 focus:border-green-600 p-2.5 rounded-xl text-xs font-medium outline-none" 
+              value={formData.desc || ''} 
+              onChange={e=>setFormData({...formData, desc: e.target.value})} 
+            />
+          </div>
+
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose} className="flex-1 py-3 border-2 text-gray-600 rounded-xl text-sm font-bold cursor-pointer">Batal</button>
-            <button type="submit" className="flex-1 py-3 bg-green-600 text-white rounded-xl text-sm font-bold shadow-md cursor-pointer">Simpan</button>
+            <button type="button" onClick={onClose} className="flex-1 py-3 border-2 text-gray-600 rounded-xl text-xs font-bold cursor-pointer hover:bg-gray-100 transition">
+              Batal
+            </button>
+            <button type="submit" className="flex-1 py-3 bg-green-600 text-white rounded-xl text-xs font-bold shadow-md hover:bg-green-700 transition cursor-pointer">
+              Simpan Transaksi
+            </button>
           </div>
         </form>
       </div>
