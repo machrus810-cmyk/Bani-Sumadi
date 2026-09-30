@@ -249,6 +249,113 @@ export interface KasSession {
   transactions: Transaction[];
 }
 
+export function extractKasSessionSortKey(session: KasSession): {
+  reuniNumber: number | null;
+  maxYear: number | null;
+  maxTransactionTime: number;
+  createdId: number;
+} {
+  const title = (session.title || '').trim().toLowerCase();
+  
+  let reuniNumber: number | null = null;
+  
+  // 1. Cek nomor reuni format: "reuni ke 9", "reuni ke-9", "kas reuni 9", "ke-9", "ke 9"
+  const reuniNumMatch = title.match(/(?:reuni|pertemuan|acara|kas)\s*(?:ke|ke-)?\s*(\d+)/i) ||
+                        title.match(/\bke-?\s*(\d+)\b/i);
+  if (reuniNumMatch && reuniNumMatch[1]) {
+    const num = parseInt(reuniNumMatch[1], 10);
+    if (!isNaN(num) && num < 1900) {
+      reuniNumber = num;
+    }
+  }
+
+  // Cek angka romawi (misal: "ke-IX", "ke VIII", "reuni IX", "ke-X", dll)
+  if (reuniNumber === null) {
+    const romanMatch = title.match(/\b(?:ke-?\s*)?(x{0,3}(?:ix|iv|v?i{0,3}))\b/i);
+    if (romanMatch && romanMatch[1] && romanMatch[1].length > 0) {
+      const romanMap: Record<string, number> = {
+        'i': 1, 'ii': 2, 'iii': 3, 'iv': 4, 'v': 5,
+        'vi': 6, 'vii': 7, 'viii': 8, 'ix': 9, 'x': 10,
+        'xi': 11, 'xii': 12, 'xiii': 13, 'xiv': 14, 'xv': 15,
+        'xvi': 16, 'xvii': 17, 'xviii': 18, 'xix': 19, 'xx': 20
+      };
+      const rVal = romanMap[romanMatch[1].toLowerCase()];
+      if (rVal) reuniNumber = rVal;
+    }
+  }
+
+  // Jika belum ketemu nomor reuni eksplisit, cari angka 1-3 digit yang bukan tahun
+  if (reuniNumber === null) {
+    const genericNum = title.match(/\b(\d{1,3})\b/);
+    if (genericNum && genericNum[1]) {
+      const g = parseInt(genericNum[1], 10);
+      if (!isNaN(g)) reuniNumber = g;
+    }
+  }
+
+  // 2. Cek Tahun dalam judul (misal: 2026, 2025)
+  let maxYear: number | null = null;
+  const yearMatch = title.match(/\b(19\d\d|20\d\d)\b/);
+  if (yearMatch && yearMatch[1]) {
+    maxYear = parseInt(yearMatch[1], 10);
+  }
+
+  // 3. Cek tanggal transaksi terbaru di dalam lembar kas
+  let maxTransactionTime = 0;
+  if (session.transactions && session.transactions.length > 0) {
+    for (const t of session.transactions) {
+      if (t.date) {
+        const time = new Date(t.date).getTime();
+        if (!isNaN(time) && time > maxTransactionTime) {
+          maxTransactionTime = time;
+        }
+      }
+    }
+  }
+
+  return {
+    reuniNumber,
+    maxYear,
+    maxTransactionTime,
+    createdId: typeof session.id === 'number' ? session.id : 0
+  };
+}
+
+export function compareKasSessionsDescending(a: KasSession, b: KasSession): number {
+  const keyA = extractKasSessionSortKey(a);
+  const keyB = extractKasSessionSortKey(b);
+
+  // 1. Prioritaskan nomor reuni (misal: Reuni ke 9 lebih baru / terakhir daripada Reuni ke 8)
+  if (keyA.reuniNumber !== null && keyB.reuniNumber !== null) {
+    if (keyA.reuniNumber !== keyB.reuniNumber) {
+      return keyB.reuniNumber - keyA.reuniNumber;
+    }
+  } else if (keyA.reuniNumber !== null && keyB.reuniNumber === null) {
+    return -1;
+  } else if (keyA.reuniNumber === null && keyB.reuniNumber !== null) {
+    return 1;
+  }
+
+  // 2. Bandingkan Tahun di judul jika ada
+  if (keyA.maxYear !== null && keyB.maxYear !== null) {
+    if (keyA.maxYear !== keyB.maxYear) {
+      return keyB.maxYear - keyA.maxYear;
+    }
+  } else if (keyA.maxYear !== null && keyB.maxYear === null) {
+    return -1;
+  } else if (keyA.maxYear === null && keyB.maxYear !== null) {
+    return 1;
+  }
+
+  // 3. Bandingkan tanggal transaksi terbaru
+  if (keyA.maxTransactionTime !== keyB.maxTransactionTime && keyA.maxTransactionTime > 0 && keyB.maxTransactionTime > 0) {
+    return keyB.maxTransactionTime - keyA.maxTransactionTime;
+  }
+
+  // 4. Fallback ke ID
+  return keyB.createdId - keyA.createdId;
+}
+
 export interface IuranRow {
   id: number;
   name: string;
@@ -259,6 +366,43 @@ export interface IuranSession {
   id: number;
   title: string;
   data: IuranRow[];
+}
+
+export function extractIuranSessionSortKey(session: IuranSession): {
+  reuniNumber: number | null;
+  maxYear: number | null;
+  createdId: number;
+} {
+  const title = (session.title || '').trim().toLowerCase();
+  let reuniNumber: number | null = null;
+  const match = title.match(/(?:reuni|pertemuan|iuran|kas)\s*(?:ke|ke-)?\s*(\d+)/i) ||
+                title.match(/\bke-?\s*(\d+)\b/i);
+  if (match && match[1]) {
+    const num = parseInt(match[1], 10);
+    if (!isNaN(num) && num < 1900) reuniNumber = num;
+  }
+  let maxYear: number | null = null;
+  const yearMatch = title.match(/\b(19\d\d|20\d\d)\b/);
+  if (yearMatch && yearMatch[1]) {
+    maxYear = parseInt(yearMatch[1], 10);
+  }
+  return { reuniNumber, maxYear, createdId: typeof session.id === 'number' ? session.id : 0 };
+}
+
+export function compareIuranSessionsDescending(a: IuranSession, b: IuranSession): number {
+  const keyA = extractIuranSessionSortKey(a);
+  const keyB = extractIuranSessionSortKey(b);
+  if (keyA.reuniNumber !== null && keyB.reuniNumber !== null) {
+    if (keyA.reuniNumber !== keyB.reuniNumber) return keyB.reuniNumber - keyA.reuniNumber;
+  } else if (keyA.reuniNumber !== null && keyB.reuniNumber === null) return -1;
+  else if (keyA.reuniNumber === null && keyB.reuniNumber !== null) return 1;
+
+  if (keyA.maxYear !== null && keyB.maxYear !== null) {
+    if (keyA.maxYear !== keyB.maxYear) return keyB.maxYear - keyA.maxYear;
+  } else if (keyA.maxYear !== null && keyB.maxYear === null) return -1;
+  else if (keyA.maxYear === null && keyB.maxYear !== null) return 1;
+
+  return keyB.createdId - keyA.createdId;
 }
 
 const rawInitialMembers: Member[] = [
@@ -485,7 +629,7 @@ export default function BaniSumadiApp() {
 
   const latestKasSession = useMemo(() => {
     if (kasSessions.length === 0) return null;
-    return [...kasSessions].sort((a, b) => b.id - a.id)[0];
+    return [...kasSessions].sort(compareKasSessionsDescending)[0];
   }, [kasSessions]);
 
   const totalKas = useMemo(() => {
@@ -4700,7 +4844,7 @@ function KasTab({
   showToast: (m: string, t?: 'success' | 'error') => void 
 }) {
   const sortedSessions = useMemo(() => {
-    return [...kasSessions].sort((a, b) => b.id - a.id);
+    return [...kasSessions].sort(compareKasSessionsDescending);
   }, [kasSessions]);
 
   const [activeSid, setActiveSid] = useState<number | null>(() => {
@@ -5279,7 +5423,9 @@ function ModalFormKas({
 }
 
 function IuranTab({ iuranSessions, formatRupiah, isAdmin, showToast }: { iuranSessions: IuranSession[]; formatRupiah: (n: number) => string; isAdmin: boolean; showToast: (m: string, t?: 'success' | 'error') => void }) {
-  const sortedSessions = [...iuranSessions].sort((a,b) => b.id - a.id);
+  const sortedSessions = useMemo(() => {
+    return [...iuranSessions].sort(compareIuranSessionsDescending);
+  }, [iuranSessions]);
   const [activeSid, setActiveSid] = useState<number | null>(null);
   
   useEffect(() => { if (!activeSid && sortedSessions.length > 0) setActiveSid(sortedSessions[0].id); }, [sortedSessions, activeSid]);
