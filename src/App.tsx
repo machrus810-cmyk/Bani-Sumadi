@@ -29,9 +29,9 @@ import ImageCropperModal from './ImageCropperModal';
 import { PWAInstallButton } from './PWAInstallButton';
 import { OfflineIndicator } from './OfflineIndicator';
 import { SplashScreen } from './SplashScreen';
-import html2canvas from 'html2canvas';
+import { toBlob, toJpeg } from 'html-to-image';
 
-// Helper unduh JPEG yang 100% kompatibel di HP Android, iOS, dan Desktop
+// Helper unduh JPEG yang 100% kompatibel di HP Android, iOS, dan Desktop (Mendukung Tailwind v4 & Modern CSS)
 export async function exportElementAsJPEG(
   elementId: string, 
   filename: string, 
@@ -43,85 +43,87 @@ export async function exportElementAsJPEG(
     return false;
   }
 
+  const safeFilename = filename.endsWith('.jpg') || filename.endsWith('.jpeg') ? filename : `${filename}.jpg`;
+
   try {
-    const canvas = await html2canvas(target, {
-      scale: typeof window !== 'undefined' && window.devicePixelRatio && window.devicePixelRatio > 1 ? Math.min(window.devicePixelRatio, 2.5) : 2,
+    const pixelRatio = typeof window !== 'undefined' && window.devicePixelRatio && window.devicePixelRatio > 1 
+      ? Math.min(window.devicePixelRatio, 2) 
+      : 2;
+
+    const options = {
+      quality: 0.95,
       backgroundColor: '#ffffff',
-      useCORS: true,
-      allowTaint: true,
-      logging: false,
-      scrollX: 0,
-      scrollY: 0
-    });
+      pixelRatio: pixelRatio,
+      cacheBust: true,
+      style: {
+        transform: 'none',
+        margin: '0'
+      }
+    };
 
-    const safeFilename = filename.endsWith('.jpg') || filename.endsWith('.jpeg') ? filename : `${filename}.jpg`;
+    // 1. Coba metode toBlob
+    let blob: Blob | null = null;
+    try {
+      blob = await toBlob(target, options);
+    } catch (blobErr) {
+      console.warn('toBlob error, attempting toJpeg fallback:', blobErr);
+    }
 
-    return new Promise((resolve) => {
-      canvas.toBlob(async (blob) => {
-        if (!blob) {
-          try {
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
-            const a = document.createElement('a');
-            a.download = safeFilename;
-            a.href = dataUrl;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            showToast?.('Unduhan JPEG berhasil dimulai', 'success');
-            resolve(true);
-          } catch {
-            showToast?.('Gagal menyimpan file gambar', 'error');
-            resolve(false);
-          }
-          return;
-        }
-
-        // Jika browser mendukung Web Share API (sangat ramah Android: bisa langsung simpan ke galeri atau bagikan ke WhatsApp)
-        const file = new File([blob], safeFilename, { type: 'image/jpeg' });
-        if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
-          try {
-            await navigator.share({
-              files: [file],
-              title: safeFilename.replace(/\.jpg$/i, ''),
-              text: 'Laporan Keuangan Keluarga Bani Sumadi'
-            });
-            showToast?.('Laporan berhasil disimpan / dibagikan', 'success');
-            resolve(true);
-            return;
-          } catch (shareErr: any) {
-            if (shareErr.name === 'AbortError') {
-              resolve(true);
-              return;
-            }
-          }
-        }
-
-        // Direct Download via Object URL Blob (Handal di semua browser modern termasuk Android Chrome)
+    if (blob) {
+      // Jika browser mendukung Web Share API (sangat ramah di Android: bisa langsung simpan ke Galeri / share ke WhatsApp)
+      const file = new File([blob], safeFilename, { type: 'image/jpeg' });
+      if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
-          const blobUrl = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.style.display = 'none';
-          a.download = safeFilename;
-          a.href = blobUrl;
-          document.body.appendChild(a);
-          a.click();
-          setTimeout(() => {
-            if (document.body.contains(a)) {
-              document.body.removeChild(a);
-            }
-            URL.revokeObjectURL(blobUrl);
-          }, 2000);
-          showToast?.('File JPEG berhasil diunduh', 'success');
-          resolve(true);
-        } catch {
-          showToast?.('Gagal mengunduh file gambar', 'error');
-          resolve(false);
+          await navigator.share({
+            files: [file],
+            title: safeFilename.replace(/\.jpg$/i, ''),
+            text: 'Laporan Keuangan Keluarga Bani Sumadi'
+          });
+          showToast?.('Laporan berhasil dibagikan / disimpan', 'success');
+          return true;
+        } catch (shareErr: any) {
+          if (shareErr.name === 'AbortError') {
+            return true;
+          }
         }
-      }, 'image/jpeg', 0.95);
-    });
-  } catch (err) {
+      }
+
+      // Direct Download via Object URL Blob
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.download = safeFilename;
+      a.href = blobUrl;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        if (document.body.contains(a)) {
+          document.body.removeChild(a);
+        }
+        URL.revokeObjectURL(blobUrl);
+      }, 2000);
+      showToast?.('File JPEG berhasil diunduh', 'success');
+      return true;
+    }
+
+    // 2. Fallback jika toBlob tidak menghasilkan blob: gunakan toJpeg (dataUrl)
+    const dataUrl = await toJpeg(target, options);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.download = safeFilename;
+    a.href = dataUrl;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      if (document.body.contains(a)) {
+        document.body.removeChild(a);
+      }
+    }, 1000);
+    showToast?.('File JPEG berhasil diunduh', 'success');
+    return true;
+  } catch (err: any) {
     console.error('Export JPEG error:', err);
-    showToast?.('Gagal memproses gambar JPEG', 'error');
+    showToast?.('Gagal memproses gambar JPEG: ' + (err?.message || 'terjadi kendala'), 'error');
     return false;
   }
 }
