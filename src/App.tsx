@@ -29,6 +29,102 @@ import ImageCropperModal from './ImageCropperModal';
 import { PWAInstallButton } from './PWAInstallButton';
 import { OfflineIndicator } from './OfflineIndicator';
 import { SplashScreen } from './SplashScreen';
+import html2canvas from 'html2canvas';
+
+// Helper unduh JPEG yang 100% kompatibel di HP Android, iOS, dan Desktop
+export async function exportElementAsJPEG(
+  elementId: string, 
+  filename: string, 
+  showToast?: (m: string, t?: 'success' | 'error') => void
+): Promise<boolean> {
+  const target = document.getElementById(elementId);
+  if (!target) {
+    showToast?.('Area data tidak ditemukan', 'error');
+    return false;
+  }
+
+  try {
+    const canvas = await html2canvas(target, {
+      scale: typeof window !== 'undefined' && window.devicePixelRatio && window.devicePixelRatio > 1 ? Math.min(window.devicePixelRatio, 2.5) : 2,
+      backgroundColor: '#ffffff',
+      useCORS: true,
+      allowTaint: true,
+      logging: false,
+      scrollX: 0,
+      scrollY: 0
+    });
+
+    const safeFilename = filename.endsWith('.jpg') || filename.endsWith('.jpeg') ? filename : `${filename}.jpg`;
+
+    return new Promise((resolve) => {
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          try {
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+            const a = document.createElement('a');
+            a.download = safeFilename;
+            a.href = dataUrl;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            showToast?.('Unduhan JPEG berhasil dimulai', 'success');
+            resolve(true);
+          } catch {
+            showToast?.('Gagal menyimpan file gambar', 'error');
+            resolve(false);
+          }
+          return;
+        }
+
+        // Jika browser mendukung Web Share API (sangat ramah Android: bisa langsung simpan ke galeri atau bagikan ke WhatsApp)
+        const file = new File([blob], safeFilename, { type: 'image/jpeg' });
+        if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              files: [file],
+              title: safeFilename.replace(/\.jpg$/i, ''),
+              text: 'Laporan Keuangan Keluarga Bani Sumadi'
+            });
+            showToast?.('Laporan berhasil disimpan / dibagikan', 'success');
+            resolve(true);
+            return;
+          } catch (shareErr: any) {
+            if (shareErr.name === 'AbortError') {
+              resolve(true);
+              return;
+            }
+          }
+        }
+
+        // Direct Download via Object URL Blob (Handal di semua browser modern termasuk Android Chrome)
+        try {
+          const blobUrl = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.style.display = 'none';
+          a.download = safeFilename;
+          a.href = blobUrl;
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => {
+            if (document.body.contains(a)) {
+              document.body.removeChild(a);
+            }
+            URL.revokeObjectURL(blobUrl);
+          }, 2000);
+          showToast?.('File JPEG berhasil diunduh', 'success');
+          resolve(true);
+        } catch {
+          showToast?.('Gagal mengunduh file gambar', 'error');
+          resolve(false);
+        }
+      }, 'image/jpeg', 0.95);
+    });
+  } catch (err) {
+    console.error('Export JPEG error:', err);
+    showToast?.('Gagal memproses gambar JPEG', 'error');
+    return false;
+  }
+}
 
 // --- DATA SILSILAH AWAL (Mbah Sumadi, Istri 1 & Istri 2 tanpa form "Pasangan") ---
 export interface Spouse {
@@ -4887,30 +4983,12 @@ function KasTab({
     return sorted;
   }, [currentTransactions, filterType]);
 
-  const handleDownloadJPEG = () => {
-    const target = document.getElementById('kas-download-area');
-    if (!target) return;
+  const handleDownloadJPEG = async () => {
     setIsDownloading(true);
-    const capture = () => {
-      const h2c = (window as any).html2canvas;
-      if (h2c) {
-        h2c(target, { backgroundColor: '#ffffff', scale: 2 }).then((canvas: HTMLCanvasElement) => {
-          const link = document.createElement('a');
-          link.download = `Laporan_Kas_${activeSession?.title?.replace(/\s+/g, '_') || 'Keluarga'}.jpg`;
-          link.href = canvas.toDataURL('image/jpeg');
-          link.click();
-          setIsDownloading(false);
-        }).catch(() => setIsDownloading(false));
-      } else {
-        setIsDownloading(false);
-      }
-    };
-    if (!(window as any).html2canvas) {
-      const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-      script.onload = capture;
-      document.body.appendChild(script);
-    } else capture();
+    const title = activeSession?.title?.trim().replace(/[/\\?%*:|"<>]/g, '-').replace(/\s+/g, '_') || 'Keluarga';
+    const filename = `Laporan_Kas_${title}.jpg`;
+    await exportElementAsJPEG('kas-download-area', filename, showToast);
+    setIsDownloading(false);
   };
 
   const executeDeleteSession = async (id: number) => {
@@ -5430,30 +5508,12 @@ function IuranTab({ iuranSessions, formatRupiah, isAdmin, showToast }: { iuranSe
   const [sessionToDelete, setSessionToDelete] = useState<number | null>(null);
   const [itemToDelete, setItemToDelete] = useState<number | null>(null);
 
-  const handleDownload = () => {
-    const el = document.getElementById('iuran-area');
-    if(!el) return;
+  const handleDownload = async () => {
     setIsDownloading(true);
-    const trigger = () => {
-      const h2c = (window as any).html2canvas;
-      if (h2c) {
-        h2c(el, { scale: 2, backgroundColor: '#ffffff' }).then((canvas: HTMLCanvasElement) => {
-          const link = document.createElement('a');
-          link.download = `Data_Iuran_${activeSession?.title?.substring(0,10) || 'Keluarga'}.jpg`;
-          link.href = canvas.toDataURL('image/jpeg');
-          link.click();
-          setIsDownloading(false);
-        }).catch(() => setIsDownloading(false));
-      } else {
-        setIsDownloading(false);
-      }
-    };
-    if (!(window as any).html2canvas) {
-      const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-      script.onload = trigger;
-      document.body.appendChild(script);
-    } else trigger();
+    const title = activeSession?.title?.trim().replace(/[/\\?%*:|"<>]/g, '-').replace(/\s+/g, '_') || 'Keluarga';
+    const filename = `Data_Iuran_${title}.jpg`;
+    await exportElementAsJPEG('iuran-area', filename, showToast);
+    setIsDownloading(false);
   };
 
   const executeDeleteSession = async (id: number) => {
