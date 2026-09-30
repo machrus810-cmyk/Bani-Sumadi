@@ -31,7 +31,7 @@ import { OfflineIndicator } from './OfflineIndicator';
 import { SplashScreen } from './SplashScreen';
 import { toBlob, toJpeg } from 'html-to-image';
 
-// Helper unduh JPEG yang 100% kompatibel di HP Android, iOS, dan Desktop (Mendukung Tailwind v4 & Modern CSS)
+// Helper unduh langsung file JPEG ke memori / folder unduhan perangkat (Android, iOS, dan Desktop)
 export async function exportElementAsJPEG(
   elementId: string, 
   filename: string, 
@@ -61,7 +61,7 @@ export async function exportElementAsJPEG(
       }
     };
 
-    // 1. Coba metode toBlob
+    // 1. Coba metode toBlob untuk unduhan langsung via Blob Object URL
     let blob: Blob | null = null;
     try {
       blob = await toBlob(target, options);
@@ -70,25 +70,7 @@ export async function exportElementAsJPEG(
     }
 
     if (blob) {
-      // Jika browser mendukung Web Share API (sangat ramah di Android: bisa langsung simpan ke Galeri / share ke WhatsApp)
-      const file = new File([blob], safeFilename, { type: 'image/jpeg' });
-      if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share({
-            files: [file],
-            title: safeFilename.replace(/\.jpg$/i, ''),
-            text: 'Laporan Keuangan Keluarga Bani Sumadi'
-          });
-          showToast?.('Laporan berhasil dibagikan / disimpan', 'success');
-          return true;
-        } catch (shareErr: any) {
-          if (shareErr.name === 'AbortError') {
-            return true;
-          }
-        }
-      }
-
-      // Direct Download via Object URL Blob
+      // Langsung download file JPEG ke folder Download perangkat
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.style.display = 'none';
@@ -102,11 +84,11 @@ export async function exportElementAsJPEG(
         }
         URL.revokeObjectURL(blobUrl);
       }, 2000);
-      showToast?.('File JPEG berhasil diunduh', 'success');
+      showToast?.('File JPEG berhasil diunduh ke perangkat', 'success');
       return true;
     }
 
-    // 2. Fallback jika toBlob tidak menghasilkan blob: gunakan toJpeg (dataUrl)
+    // 2. Fallback jika toBlob tidak menghasilkan blob: gunakan toJpeg (dataUrl) dan langsung unduh
     const dataUrl = await toJpeg(target, options);
     const a = document.createElement('a');
     a.style.display = 'none';
@@ -119,7 +101,7 @@ export async function exportElementAsJPEG(
         document.body.removeChild(a);
       }
     }, 1000);
-    showToast?.('File JPEG berhasil diunduh', 'success');
+    showToast?.('File JPEG berhasil diunduh ke perangkat', 'success');
     return true;
   } catch (err: any) {
     console.error('Export JPEG error:', err);
