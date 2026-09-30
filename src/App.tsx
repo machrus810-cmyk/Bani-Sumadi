@@ -364,6 +364,7 @@ export default function BaniSumadiApp() {
   });
   const [isAdminLoginOpen, setIsAdminLoginOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'dash' | 'pohon' | 'anggota' | 'agenda' | 'kas' | 'iuran'>('dash');
+  const [treeFocusTarget, setTreeFocusTarget] = useState<{ memberId?: number; spouseName?: string; name?: string; timestamp?: number } | null>(null);
   
   // TOAST NOTIFICATION STATE
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -597,8 +598,8 @@ export default function BaniSumadiApp() {
         <main className="flex-1 overflow-y-auto relative bg-gray-50">
           <div className="p-4 h-full">
              {activeTab === 'dash' && <DashboardTab members={members} totalKas={totalKas} latestKasTitle={latestKasSession?.title} nextAgenda={nextAgenda} formatRupiah={formatRupiah} sliderImages={sliderImages} isAdmin={authRole === 'admin'} showToast={showToast} onNavigateTab={setActiveTab} />}
-             {activeTab === 'pohon' && <PohonSilsilahTab members={members} showToast={showToast} onNavigateTab={setActiveTab} />}
-             {activeTab === 'anggota' && <AnggotaTab members={members} isAdmin={authRole === 'admin'} showToast={showToast} onNavigateTab={setActiveTab} />}
+             {activeTab === 'pohon' && <PohonSilsilahTab members={members} showToast={showToast} onNavigateTab={setActiveTab} focusTarget={treeFocusTarget} onClearFocus={() => setTreeFocusTarget(null)} />}
+             {activeTab === 'anggota' && <AnggotaTab members={members} isAdmin={authRole === 'admin'} showToast={showToast} onNavigateTab={setActiveTab} onFocusInTree={(target) => { setTreeFocusTarget({ ...target, timestamp: Date.now() }); setActiveTab('pohon'); }} />}
              {activeTab === 'agenda' && <AgendaTab agendas={agendas} isAdmin={authRole === 'admin'} showToast={showToast} />}
              {activeTab === 'kas' && <KasTab kasSessions={kasSessions} legacyTransactions={transactions} totalKas={totalKas} formatRupiah={formatRupiah} isAdmin={authRole === 'admin'} showToast={showToast} />}
              {activeTab === 'iuran' && <IuranTab iuranSessions={iuranSessions} formatRupiah={formatRupiah} isAdmin={authRole === 'admin'} showToast={showToast} />}
@@ -1451,15 +1452,24 @@ function PanZoomWrapper({
   zoom, 
   setZoom, 
   position, 
-  setPosition 
+  setPosition,
+  containerRef: externalContainerRef,
+  contentRef: externalContentRef,
+  isAnimating = false
 }: { 
   children: React.ReactNode; 
   zoom: number; 
   setZoom: React.Dispatch<React.SetStateAction<number>>; 
   position: { x: number; y: number }; 
   setPosition: React.Dispatch<React.SetStateAction<{ x: number; y: number }>>;
+  containerRef?: React.RefObject<HTMLDivElement | null>;
+  contentRef?: React.RefObject<HTMLDivElement | null>;
+  isAnimating?: boolean;
 }) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const internalContainerRef = useRef<HTMLDivElement>(null);
+  const containerRef = externalContainerRef || internalContainerRef;
+  const internalContentRef = useRef<HTMLDivElement>(null);
+  const contentRef = externalContentRef || internalContentRef;
   const isDragging = useRef(false);
   const dragStart = useRef({ x: 0, y: 0 });
   const initialPinchDist = useRef<number | null>(null);
@@ -1509,13 +1519,20 @@ function PanZoomWrapper({
   return (
     <div 
       ref={containerRef} 
-      className="absolute inset-0 bg-[#1A4331] cursor-grab active:cursor-grabbing touch-none overflow-hidden"
+      className="absolute inset-0 bg-[#1A4331] cursor-grab active:cursor-grabbing touch-none overflow-hidden select-none"
       onMouseDown={(e) => { isDragging.current = true; dragStart.current = { x: e.clientX - position.x, y: e.clientY - position.y }; }}
       onMouseMove={(e) => { if(isDragging.current) setPosition({ x: e.clientX - dragStart.current.x, y: e.clientY - dragStart.current.y }); }}
       onMouseUp={() => isDragging.current = false} 
       onMouseLeave={() => isDragging.current = false}
     >
-       <div style={{ transform: `translate(${position.x}px, ${position.y}px) scale(${zoom})`, transformOrigin: 'top center' }} className="w-full flex justify-center origin-top transition-transform duration-75 ease-out pt-24 pb-40">
+       <div 
+         ref={contentRef}
+         style={{ 
+           transform: `translate(${position.x}px, ${position.y}px) scale(${zoom})`, 
+           transformOrigin: '0 0' 
+         }} 
+         className={`w-max min-w-full flex justify-center origin-top-left pt-20 pb-48 px-16 ${isAnimating ? 'transition-transform duration-500 ease-out' : ''}`}
+       >
           {children}
        </div>
     </div>
@@ -1937,6 +1954,7 @@ function buildFullProfileData(
 // TAMPILAN POHON SILSILAH
 // ==========================================
 function PersonBox({ 
+  id,
   name, 
   gender, 
   isAlive, 
@@ -1944,8 +1962,10 @@ function PersonBox({
   label, 
   isRootAncestor = false,
   badgeColor,
+  isHighlighted = false,
   onClick 
 }: { 
+  id?: string;
   name: string; 
   gender: 'L' | 'P'; 
   isAlive: boolean; 
@@ -1953,6 +1973,7 @@ function PersonBox({
   label?: string; 
   isRootAncestor?: boolean;
   badgeColor?: string;
+  isHighlighted?: boolean;
   onClick: (e: React.MouseEvent) => void; 
 }) {
   const isMale = gender === 'L';
@@ -1960,10 +1981,23 @@ function PersonBox({
   if (isRootAncestor) {
     return (
       <div 
-        className="relative flex flex-col items-center cursor-pointer p-3 rounded-2xl shadow-xl transition-all duration-200 hover:scale-105 hover:shadow-2xl w-[114px] sm:w-[124px] select-none border-2 border-amber-400 bg-gradient-to-b from-amber-50/95 via-emerald-50/90 to-white text-emerald-950 ring-2 ring-amber-400/50 flex-shrink-0 backdrop-blur-sm"
+        id={id}
+        data-person-name={name.toLowerCase()}
+        className={`relative flex flex-col items-center cursor-pointer p-3 rounded-2xl shadow-xl transition-all duration-300 hover:scale-105 hover:shadow-2xl w-[114px] sm:w-[124px] select-none border-2 border-amber-400 bg-gradient-to-b from-amber-50/95 via-emerald-50/90 to-white text-emerald-950 flex-shrink-0 backdrop-blur-sm ${
+          isHighlighted 
+            ? 'ring-4 ring-amber-400 ring-offset-2 ring-offset-emerald-900 shadow-2xl scale-110 z-40 animate-pulse' 
+            : 'ring-2 ring-amber-400/50'
+        }`}
         onClick={onClick}
         title={`Klik untuk melihat detail profil ${name} (Pemuncak Silsilah)`}
       >
+        {isHighlighted && (
+          <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-emerald-950 font-black text-[9px] px-2.5 py-0.5 rounded-full shadow-2xl border border-white animate-bounce whitespace-nowrap z-50 flex items-center gap-1">
+            <span>🎯</span>
+            <span>Di Sini</span>
+          </div>
+        )}
+
         <span className="text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full mb-1 border border-amber-400 bg-gradient-to-r from-amber-500 to-emerald-600 text-white shadow-xs">
           👑 Pemuncak Silsilah
         </span>
@@ -1992,14 +2026,25 @@ function PersonBox({
 
   return (
     <div 
-      className={`relative flex flex-col items-center cursor-pointer p-2.5 rounded-2xl shadow-md transition-all duration-150 hover:scale-105 hover:shadow-xl w-[92px] sm:w-[98px] select-none border-2 flex-shrink-0 backdrop-blur-sm ${
-        isMale 
+      id={id}
+      data-person-name={name.toLowerCase()}
+      className={`relative flex flex-col items-center cursor-pointer p-2.5 rounded-2xl shadow-md transition-all duration-300 hover:scale-105 hover:shadow-xl w-[92px] sm:w-[98px] select-none border-2 flex-shrink-0 backdrop-blur-sm ${
+        isHighlighted
+          ? 'ring-4 ring-amber-400 ring-offset-2 ring-offset-emerald-900 shadow-2xl scale-110 z-40 animate-pulse bg-amber-50 border-amber-400 text-amber-950'
+          : isMale 
           ? 'bg-gradient-to-b from-blue-50/95 to-white border-blue-400 text-blue-950' 
           : 'bg-gradient-to-b from-pink-50/95 to-white border-pink-400 text-pink-950'
       }`}
       onClick={onClick}
       title={`Klik untuk melihat detail profil ${name}`}
     >
+      {isHighlighted && (
+        <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-emerald-950 font-black text-[9px] px-2.5 py-0.5 rounded-full shadow-2xl border border-white animate-bounce whitespace-nowrap z-50 flex items-center gap-1">
+          <span>🎯</span>
+          <span>Di Sini</span>
+        </div>
+      )}
+
       {/* Label / Badge (e.g. Kepala Keluarga, Istri 1, Suami, dll.) */}
       {label && (
         <span className={`text-[7.5px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-full mb-1 border ${
@@ -2057,18 +2102,30 @@ function MarriageConnector({ label }: { label?: string }) {
 function PohonSilsilahTab({ 
   members, 
   showToast,
-  onNavigateTab
+  onNavigateTab,
+  focusTarget,
+  onClearFocus
 }: { 
   members: Member[]; 
   showToast?: (m: string, t?: 'success' | 'error') => void;
   onNavigateTab?: (tab: 'dash' | 'pohon' | 'anggota' | 'agenda' | 'kas' | 'iuran') => void;
+  focusTarget?: { memberId?: number; spouseName?: string; name?: string; timestamp?: number } | null;
+  onClearFocus?: () => void;
 }) {
   const [zoom, setZoom] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [expandAll, setExpandAll] = useState(true);
   const [selectedTarget, setSelectedTarget] = useState<FamilyRelationTarget | null>(null);
+  
+  // State untuk pencarian nama di pohon
+  const [treeSearchQuery, setTreeSearchQuery] = useState('');
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [highlightedTarget, setHighlightedTarget] = useState<{ memberId?: number; spouseName?: string; name?: string } | null>(null);
 
-  useEffect(() => { setZoom(1); setPosition({ x: 0, y: 0 }); }, []);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const highlightTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // 1. Deteksi Pemuncak Silsilah (Mbah Sumadi)
   const sumadi = useMemo(() => {
@@ -2169,6 +2226,195 @@ function PohonSilsilahTab({
     return spouse ? `${parent.name} & ${spouse.name}` : parent.name;
   };
 
+  // Helper untuk memusatkan tampilan pada Mbah KH. Sumadi (Akar Utama)
+  const centerRootAncestor = () => {
+    if (!containerRef.current || !contentRef.current) {
+      setPosition({ x: 0, y: 0 });
+      setZoom(1);
+      return;
+    }
+    const sumadiEl = document.getElementById('tree-member-1') || (document.querySelector('[data-person-name*="sumadi"]') as HTMLElement);
+    if (sumadiEl) {
+      const targetRect = sumadiEl.getBoundingClientRect();
+      const contRect = containerRef.current.getBoundingClientRect();
+      const contentRect = contentRef.current.getBoundingClientRect();
+
+      const targetCenterXInContent = (targetRect.left + targetRect.width / 2 - contentRect.left) / (zoom || 1);
+      const targetZoom = 1.0;
+      const newX = (contRect.width / 2) - (targetCenterXInContent * targetZoom);
+      const newY = 30;
+
+      setIsAnimating(true);
+      setPosition({ x: newX, y: newY });
+      setZoom(targetZoom);
+      setTimeout(() => setIsAnimating(false), 550);
+    } else {
+      setPosition({ x: 0, y: 0 });
+      setZoom(1);
+    }
+  };
+
+  // Helper untuk fokus langsung dan scroll/center ke card orang di pohon
+  const focusOnPerson = (target: { memberId?: number; spouseName?: string; name?: string }) => {
+    setExpandAll(true);
+    setHighlightedTarget(target);
+
+    if (highlightTimerRef.current) {
+      clearTimeout(highlightTimerRef.current);
+    }
+    highlightTimerRef.current = setTimeout(() => {
+      setHighlightedTarget(null);
+    }, 8000);
+
+    const attemptCenter = (attemptsLeft: number) => {
+      let targetEl: HTMLElement | null = null;
+      if (target.memberId) {
+        targetEl = document.getElementById(`tree-member-${target.memberId}`);
+      }
+      if (!targetEl && target.spouseName) {
+        const cleanSpouseName = target.spouseName.trim().toLowerCase().replace(/\s+/g, '-');
+        targetEl = document.getElementById(`tree-spouse-${cleanSpouseName}`) || 
+                   (document.querySelector(`[data-spouse-name="${target.spouseName.trim().toLowerCase()}"]`) as HTMLElement);
+      }
+      if (!targetEl && target.name) {
+        const cleanName = target.name.trim().toLowerCase();
+        const found = members.find(m => m.name.toLowerCase().includes(cleanName));
+        if (found) {
+          targetEl = document.getElementById(`tree-member-${found.id}`);
+        }
+        if (!targetEl) {
+          targetEl = (document.querySelector(`[data-person-name*="${cleanName}"]`) as HTMLElement) || 
+                     (document.querySelector(`[data-spouse-name*="${cleanName}"]`) as HTMLElement);
+        }
+      }
+
+      if (targetEl && containerRef.current && contentRef.current) {
+        const targetRect = targetEl.getBoundingClientRect();
+        const contRect = containerRef.current.getBoundingClientRect();
+        const contentRect = contentRef.current.getBoundingClientRect();
+
+        // Hitung posisi tengah kartu target pada ruang koordinat unscaled konten
+        const curZoom = zoom || 1;
+        const targetCenterXInContent = (targetRect.left + targetRect.width / 2 - contentRect.left) / curZoom;
+        const targetCenterYInContent = (targetRect.top + targetRect.height / 2 - contentRect.top) / curZoom;
+
+        const targetZoom = 1.05;
+        const newX = (contRect.width / 2) - (targetCenterXInContent * targetZoom);
+        const newY = (contRect.height / 2) - (targetCenterYInContent * targetZoom);
+
+        setIsAnimating(true);
+        setPosition({ x: newX, y: newY });
+        setZoom(targetZoom);
+        setTimeout(() => setIsAnimating(false), 550);
+      } else if (attemptsLeft > 0) {
+        setTimeout(() => attemptCenter(attemptsLeft - 1), 100);
+      }
+    };
+
+    setTimeout(() => attemptCenter(8), 100);
+  };
+
+  // Fokus awal saat pertama kali buka tab pohon
+  useEffect(() => {
+    if (!focusTarget) {
+      const timer = setTimeout(() => {
+        centerRootAncestor();
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  // Pantau fokus dari tab lain (misal dari menu Anggota)
+  useEffect(() => {
+    if (focusTarget) {
+      focusOnPerson(focusTarget);
+      onClearFocus?.();
+    }
+  }, [focusTarget]);
+
+  // Daftar seluruh anggota & pasangan untuk pencarian cepat
+  const searchableTreeList = useMemo(() => {
+    const list: Array<{
+      id: string;
+      name: string;
+      photo?: string;
+      gender: 'L' | 'P';
+      isAlive: boolean;
+      branch: 'istri1' | 'istri2' | 'root';
+      branchLabel: string;
+      relationLabel: string;
+      memberId: number;
+      isSpouse: boolean;
+      spouseName?: string;
+    }> = [];
+    const seen = new Set<string>();
+
+    members.forEach(m => {
+      const isRoot = m.id === 1 || (wife1 && m.id === wife1.id) || (wife2 && m.id === wife2.id) || m.id === 2 || m.id === 3;
+      const b = isRoot ? 'root' : getMemberBranch(m, members);
+      const bLabel = isRoot 
+        ? '👑 Pemuncak Silsilah' 
+        : b === 'istri1' 
+        ? '🌺 Cabang Mbah Munasikah (Istri 1)' 
+        : '🌸 Cabang Mbah Masripah (Istri 2)';
+      const rel = getParentLabel(m, false);
+
+      const mKey = `m-${m.id}`;
+      if (!seen.has(mKey)) {
+        list.push({
+          id: mKey,
+          name: m.name,
+          photo: m.photo,
+          gender: m.gender,
+          isAlive: m.isAlive,
+          branch: b,
+          branchLabel: bLabel,
+          relationLabel: rel !== '-' ? `Ortu: ${rel}` : (isRoot ? 'Pemuncak Silsilah' : 'Anggota Keluarga'),
+          memberId: m.id,
+          isSpouse: false
+        });
+        seen.add(mKey);
+      }
+
+      const sps = getMemberSpouses(m, members);
+      sps.forEach((sp, idx) => {
+        const sKey = `sp-${m.id}-${sp.name.trim().toLowerCase()}`;
+        if (!seen.has(sKey)) {
+          const spGender = m.gender === 'L' ? 'P' : 'L';
+          const spouseRel = m.gender === 'L' 
+            ? (sps.length > 1 ? `Istri ke-${idx + 1} dari ${m.name}` : `Istri dari ${m.name}`)
+            : (sps.length > 1 ? `Suami ke-${idx + 1} dari ${m.name}` : `Suami dari ${m.name}`);
+          list.push({
+            id: sKey,
+            name: sp.name,
+            photo: sp.photo,
+            gender: spGender,
+            isAlive: sp.isAlive ?? true,
+            branch: b,
+            branchLabel: bLabel,
+            relationLabel: spouseRel,
+            memberId: m.id,
+            isSpouse: true,
+            spouseName: sp.name
+          });
+          seen.add(sKey);
+        }
+      });
+    });
+
+    return list;
+  }, [members, wife1, wife2]);
+
+  const filteredSearchResults = useMemo(() => {
+    if (!treeSearchQuery.trim()) return [];
+    const q = treeSearchQuery.trim().toLowerCase();
+    return searchableTreeList.filter(item => 
+      item.name.toLowerCase().includes(q) || 
+      item.relationLabel.toLowerCase().includes(q) ||
+      item.branchLabel.toLowerCase().includes(q)
+    ).slice(0, 8);
+  }, [searchableTreeList, treeSearchQuery]);
+
   const handleProfileClick = (node: Member, isSpouse: boolean = false, spouseObj?: Spouse) => {
     setSelectedTarget({ member: node, isSpouse, spouseObj });
   };
@@ -2178,7 +2424,7 @@ function PohonSilsilahTab({
       
       {/* HEADER JUDUL BAGAN SILSILAH */}
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center pointer-events-none w-[94%] max-w-lg">
-        <div className="bg-white/95 backdrop-blur px-5 py-1.5 rounded-full shadow-lg text-center border border-emerald-100 flex items-center gap-2">
+        <div className="bg-white/95 backdrop-blur px-4 sm:px-5 py-1.5 rounded-full shadow-lg text-center border border-emerald-100 flex items-center gap-2">
           <h2 className="text-xs sm:text-sm font-black text-emerald-950 tracking-wide flex items-center justify-center gap-1.5">
             <span>👑</span>
             <span>Bagan Silsilah Mbah KH. Sumadi</span>
@@ -2186,15 +2432,145 @@ function PohonSilsilahTab({
         </div>
       </div>
 
+      {/* FITUR PENCARIAN NAMA DI POHON SILSILAH */}
+      <div className="absolute top-3 right-3 sm:right-4 z-30 flex flex-col items-end">
+        <div className={`relative transition-all duration-200 ${isSearchOpen || treeSearchQuery ? 'w-60 sm:w-72' : 'w-10 sm:w-10'}`}>
+          {!isSearchOpen && !treeSearchQuery ? (
+            <button
+              onClick={() => setIsSearchOpen(true)}
+              className="w-10 h-10 bg-white/90 hover:bg-white text-emerald-900 rounded-full shadow-lg flex items-center justify-center transition active:scale-95 cursor-pointer border border-emerald-200 backdrop-blur-md"
+              title="Cari nama di pohon silsilah"
+            >
+              <Search size={18} />
+            </button>
+          ) : (
+            <div className="relative flex flex-col items-end w-full">
+              <div className="relative w-full shadow-xl rounded-2xl overflow-hidden border-2 border-emerald-400 bg-white">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-700 pointer-events-none" />
+                <input
+                  type="text"
+                  autoFocus
+                  value={treeSearchQuery}
+                  onChange={(e) => setTreeSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && filteredSearchResults.length > 0) {
+                      const first = filteredSearchResults[0];
+                      focusOnPerson({ memberId: first.memberId, spouseName: first.spouseName, name: first.name });
+                      setTreeSearchQuery('');
+                      setIsSearchOpen(false);
+                      showToast?.(`Menampilkan posisi ${first.name} di Pohon Silsilah`, 'success');
+                    } else if (e.key === 'Escape') {
+                      setTreeSearchQuery('');
+                      setIsSearchOpen(false);
+                    }
+                  }}
+                  placeholder="Cari nama anggota/pasangan..."
+                  className="w-full pl-8 pr-8 py-2 text-xs font-bold text-gray-800 outline-none placeholder:text-gray-400"
+                />
+                <button
+                  onClick={() => {
+                    setTreeSearchQuery('');
+                    setIsSearchOpen(false);
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 p-1 rounded-full cursor-pointer"
+                  title="Tutup pencarian"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+
+              {/* DROPDOWN HASIL PENCARIAN LIVE */}
+              {treeSearchQuery.trim() && (
+                <div className="absolute top-11 right-0 w-72 sm:w-80 bg-white rounded-2xl shadow-2xl border-2 border-emerald-300 overflow-hidden z-50 animate-fade-in max-h-72 overflow-y-auto divide-y divide-gray-100">
+                  <div className="bg-emerald-50 px-3 py-1.5 border-b border-emerald-200 flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-emerald-900">
+                      Hasil ({filteredSearchResults.length})
+                    </span>
+                    <span className="text-[9px] text-emerald-700 font-semibold">
+                      Klik untuk fokus ke kartu
+                    </span>
+                  </div>
+
+                  {filteredSearchResults.length > 0 ? (
+                    filteredSearchResults.map((item) => (
+                      <div
+                        key={item.id}
+                        onClick={() => {
+                          focusOnPerson({ memberId: item.memberId, spouseName: item.spouseName, name: item.name });
+                          setTreeSearchQuery('');
+                          setIsSearchOpen(false);
+                          showToast?.(`Menampilkan posisi ${item.name} di Pohon Silsilah`, 'success');
+                        }}
+                        className="p-2.5 hover:bg-emerald-50 transition cursor-pointer flex items-center gap-2.5 group"
+                      >
+                        {/* Avatar */}
+                        <div className="relative w-9 h-9 rounded-full overflow-hidden flex-shrink-0 border shadow-2xs">
+                          {item.photo ? (
+                            <img src={item.photo} className="w-full h-full object-cover" alt={item.name} />
+                          ) : (
+                            <div className={`w-full h-full flex items-center justify-center ${item.gender === 'L' ? 'bg-blue-100 text-blue-600' : 'bg-pink-100 text-pink-600'}`}>
+                              <Users size={16} />
+                            </div>
+                          )}
+                          {!item.isAlive && (
+                            <span className="absolute bottom-0 right-0 bg-gray-800 text-white text-[6px] font-black px-0.5 rounded">
+                              ALM
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Text info */}
+                        <div className="min-w-0 flex-1">
+                          <p className="font-bold text-xs text-gray-800 group-hover:text-emerald-800 truncate">
+                            {item.name}
+                          </p>
+                          <p className="text-[9.5px] text-gray-500 truncate leading-tight">
+                            {item.relationLabel}
+                          </p>
+                          <span className={`inline-block text-[7.5px] font-black px-1.5 py-0.2 rounded mt-0.5 ${
+                            item.branch === 'root'
+                              ? 'bg-amber-100 text-amber-900'
+                              : item.branch === 'istri1'
+                              ? 'bg-purple-100 text-purple-900'
+                              : 'bg-pink-100 text-pink-900'
+                          }`}>
+                            {item.branchLabel}
+                          </span>
+                        </div>
+
+                        {/* Chevron Icon */}
+                        <ChevronRight size={14} className="text-gray-300 group-hover:text-emerald-700 group-hover:translate-x-0.5 transition-transform flex-shrink-0" />
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-4 text-center text-xs text-gray-400 italic">
+                      Tidak ditemukan nama &quot;{treeSearchQuery}&quot; di silsilah
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* KONTROL ZOOM & VIEW */}
       <div className="absolute left-4 top-14 flex flex-col gap-2.5 z-10">
         <button onClick={() => setZoom(z => Math.min(z + 0.2, 2.5))} className="w-10 h-10 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 rounded-full text-white shadow-lg flex items-center justify-center transition active:scale-95 cursor-pointer" title="Zoom In"><Plus size={18}/></button>
         <button onClick={() => setZoom(z => Math.max(z - 0.2, 0.3))} className="w-10 h-10 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 rounded-full text-white shadow-lg flex items-center justify-center transition active:scale-95 cursor-pointer" title="Zoom Out"><Minus size={18}/></button>
-        <button onClick={() => { setZoom(1); setPosition({x:0, y:0}); }} className="w-10 h-10 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 rounded-full text-white shadow-lg flex items-center justify-center transition active:scale-95 cursor-pointer" title="Reset View"><Maximize size={16}/></button>
+        <button onClick={centerRootAncestor} className="w-10 h-10 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 rounded-full text-white shadow-lg flex items-center justify-center transition active:scale-95 cursor-pointer" title="Reset View / Pusatkan"><Maximize size={16}/></button>
         <button onClick={() => setExpandAll(!expandAll)} className={`w-10 h-10 backdrop-blur-md border rounded-full shadow-lg flex items-center justify-center transition active:scale-95 cursor-pointer ${expandAll ? 'bg-emerald-500/80 border-emerald-400 text-white' : 'bg-white/10 border-white/20 text-white hover:bg-white/20'}`} title="Buka/Tutup Cabang"><Network size={16}/></button>
       </div>
 
-      <PanZoomWrapper zoom={zoom} setZoom={setZoom} position={position} setPosition={setPosition}>
+      <PanZoomWrapper 
+        zoom={zoom} 
+        setZoom={setZoom} 
+        position={position} 
+        setPosition={setPosition} 
+        containerRef={containerRef}
+        contentRef={contentRef}
+        isAnimating={isAnimating}
+      >
         {sumadi ? (
           <div className="relative flex flex-col items-center">
             
@@ -2210,12 +2586,14 @@ function PohonSilsilahTab({
                     <div className="flex-shrink-0 z-20">
                       {wife1 ? (
                         <PersonBox
+                          id={`tree-member-${wife1.id}`}
                           name={wife1.name}
                           gender={wife1.gender}
                           isAlive={wife1.isAlive}
                           photo={wife1.photo}
                           label="Istri 1"
                           badgeColor="bg-purple-100 text-purple-900 border-purple-300"
+                          isHighlighted={Boolean(highlightedTarget?.memberId === wife1.id || (highlightedTarget?.name && wife1.name.toLowerCase().includes(highlightedTarget.name.toLowerCase())))}
                           onClick={(e) => { e.stopPropagation(); handleProfileClick(wife1, false); }}
                         />
                       ) : (
@@ -2266,6 +2644,7 @@ function PohonSilsilahTab({
                                 onOpenProfile={handleProfileClick}
                                 isRoot={false}
                                 globalExpandAll={expandAll}
+                                highlightedTarget={highlightedTarget}
                               />
                             </div>
                           );
@@ -2281,11 +2660,13 @@ function PohonSilsilahTab({
                 {/* TENGAH: MBAH KH. SUMADI (PEMUNCAK SILSILAH) */}
                 <div className="relative flex flex-col items-center z-30 px-0 flex-shrink-0">
                   <PersonBox
+                    id={`tree-member-${sumadi.id}`}
                     name={sumadi.name}
                     gender={sumadi.gender}
                     isAlive={sumadi.isAlive}
                     photo={sumadi.photo}
                     isRootAncestor={true}
+                    isHighlighted={Boolean(highlightedTarget?.memberId === sumadi.id || (highlightedTarget?.name && sumadi.name.toLowerCase().includes(highlightedTarget.name.toLowerCase())))}
                     onClick={(e) => { e.stopPropagation(); handleProfileClick(sumadi, false); }}
                   />
                 </div>
@@ -2303,12 +2684,14 @@ function PohonSilsilahTab({
                     <div className="flex-shrink-0 z-20">
                       {wife2 ? (
                         <PersonBox
+                          id={`tree-member-${wife2.id}`}
                           name={wife2.name}
                           gender={wife2.gender}
                           isAlive={wife2.isAlive}
                           photo={wife2.photo}
                           label="Istri 2"
                           badgeColor="bg-pink-100 text-pink-900 border-pink-300"
+                          isHighlighted={Boolean(highlightedTarget?.memberId === wife2.id || (highlightedTarget?.name && wife2.name.toLowerCase().includes(highlightedTarget.name.toLowerCase())))}
                           onClick={(e) => { e.stopPropagation(); handleProfileClick(wife2, false); }}
                         />
                       ) : (
@@ -2355,6 +2738,7 @@ function PohonSilsilahTab({
                                 onOpenProfile={handleProfileClick}
                                 isRoot={false}
                                 globalExpandAll={expandAll}
+                                highlightedTarget={highlightedTarget}
                               />
                             </div>
                           );
@@ -2380,8 +2764,13 @@ function PohonSilsilahTab({
           initialTarget={selectedTarget} 
           members={members} 
           onClose={() => setSelectedTarget(null)} 
-          onNavigateToTree={() => {
+          onNavigateToTree={(target) => {
             setSelectedTarget(null);
+            focusOnPerson({ 
+              memberId: target.member.id, 
+              spouseName: target.isSpouse ? (target.spouseObj?.name || target.member.spouse) : undefined,
+              name: target.isSpouse ? (target.spouseObj?.name || target.member.spouse) : target.member.name
+            });
           }}
         />
       )}
@@ -2398,6 +2787,8 @@ function CoupleCard({
   hasChildren,
   isExpanded,
   onToggleExpand,
+  isMemberHighlighted = false,
+  isSpouseHighlighted = false
 }: {
   member: Member;
   spouse: Spouse;
@@ -2407,15 +2798,30 @@ function CoupleCard({
   hasChildren?: boolean;
   isExpanded?: boolean;
   onToggleExpand?: () => void;
+  isMemberHighlighted?: boolean;
+  isSpouseHighlighted?: boolean;
 }) {
   const isPrimaryMale = member.gender === 'L';
   const spouseIsMale = !isPrimaryMale;
+  const isAnyHighlighted = isMemberHighlighted || isSpouseHighlighted;
+  const cleanSpouseName = (spouse.name || '').toLowerCase().replace(/\s+/g, '-');
 
   return (
     <div className="relative flex flex-col items-center select-none flex-shrink-0">
       {/* KARTU GABUNGAN PASANGAN (SATU CARD) */}
-      <div className="relative flex flex-col items-center p-2 sm:p-2.5 rounded-2xl shadow-md border-2 border-emerald-400/80 bg-gradient-to-b from-emerald-50/70 via-white to-white text-emerald-950 transition-all duration-150 hover:shadow-xl hover:border-emerald-500 backdrop-blur-sm">
+      <div className={`relative flex flex-col items-center p-2 sm:p-2.5 rounded-2xl shadow-md border-2 transition-all duration-300 backdrop-blur-sm ${
+        isAnyHighlighted
+          ? 'border-amber-400 ring-4 ring-amber-400 ring-offset-2 ring-offset-emerald-900 shadow-2xl scale-105 z-40 bg-amber-50/90 text-amber-950 animate-pulse'
+          : 'border-emerald-400/80 bg-gradient-to-b from-emerald-50/70 via-white to-white text-emerald-950 hover:shadow-xl hover:border-emerald-500'
+      }`}>
         
+        {isAnyHighlighted && (
+          <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-emerald-950 font-black text-[9px] px-2.5 py-0.5 rounded-full shadow-2xl border border-white animate-bounce whitespace-nowrap z-50 flex items-center gap-1">
+            <span>🎯</span>
+            <span>Di Sini</span>
+          </div>
+        )}
+
         {/* Label Atas Kartu (e.g. Istri Pertama, Istri Kedua, Pasangan) */}
         {label && (
           <span className={`text-[7.5px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full mb-1.5 border shadow-2xs ${
@@ -2430,8 +2836,14 @@ function CoupleCard({
           
           {/* SISI ANGGOTA UTAMA */}
           <div 
+            id={`tree-member-${member.id}`}
+            data-person-name={member.name.toLowerCase()}
             onClick={(e) => { e.stopPropagation(); onOpenProfile(member, false); }}
-            className={`flex flex-col items-center p-1.5 rounded-xl cursor-pointer transition hover:bg-emerald-100/50 w-[84px] sm:w-[92px] ${
+            className={`flex flex-col items-center p-1.5 rounded-xl cursor-pointer transition w-[84px] sm:w-[92px] ${
+              isMemberHighlighted 
+                ? 'bg-amber-200/80 ring-2 ring-amber-400 font-black scale-105' 
+                : 'hover:bg-emerald-100/50'
+            } ${
               isPrimaryMale ? 'text-blue-950' : 'text-pink-950'
             }`}
             title={`Klik untuk melihat detail profil ${member.name}`}
@@ -2443,7 +2855,9 @@ function CoupleCard({
                 </span>
               )}
               <div className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full flex items-center justify-center border-2 shadow-sm overflow-hidden flex-shrink-0 ${
-                isPrimaryMale 
+                isMemberHighlighted
+                  ? 'border-amber-400 ring-2 ring-amber-300'
+                  : isPrimaryMale 
                   ? 'bg-blue-100/70 text-blue-600 border-blue-300' 
                   : 'bg-pink-100/70 text-pink-600 border-pink-300'
               }`}>
@@ -2476,8 +2890,14 @@ function CoupleCard({
 
           {/* SISI PASANGAN */}
           <div 
+            id={`tree-spouse-${cleanSpouseName}`}
+            data-spouse-name={spouse.name.toLowerCase()}
             onClick={(e) => { e.stopPropagation(); onOpenProfile(member, true, spouse); }}
-            className={`flex flex-col items-center p-1.5 rounded-xl cursor-pointer transition hover:bg-emerald-100/50 w-[84px] sm:w-[92px] ${
+            className={`flex flex-col items-center p-1.5 rounded-xl cursor-pointer transition w-[84px] sm:w-[92px] ${
+              isSpouseHighlighted 
+                ? 'bg-amber-200/80 ring-2 ring-amber-400 font-black scale-105' 
+                : 'hover:bg-emerald-100/50'
+            } ${
               spouseIsMale ? 'text-blue-950' : 'text-pink-950'
             }`}
             title={`Klik untuk melihat detail profil ${spouse.name}`}
@@ -2489,7 +2909,9 @@ function CoupleCard({
                 </span>
               )}
               <div className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full flex items-center justify-center border-2 shadow-sm overflow-hidden flex-shrink-0 ${
-                spouseIsMale 
+                isSpouseHighlighted
+                  ? 'border-amber-400 ring-2 ring-amber-300'
+                  : spouseIsMale 
                   ? 'bg-blue-100/70 text-blue-600 border-blue-300' 
                   : 'bg-pink-100/70 text-pink-600 border-pink-300'
               }`}>
@@ -2536,7 +2958,8 @@ function TreeNode({
   isRoot, 
   globalExpandAll, 
   hideSpouse = false,
-  customLabel
+  customLabel,
+  highlightedTarget
 }: { 
   node: TreeNodeData; 
   members?: Member[];
@@ -2545,6 +2968,7 @@ function TreeNode({
   globalExpandAll: boolean; 
   hideSpouse?: boolean;
   customLabel?: string;
+  highlightedTarget?: { memberId?: number; spouseName?: string; name?: string } | null;
 }) {
   const [isExpanded, setIsExpanded] = useState(true);
   const spouses = getMemberSpouses(node, members);
@@ -2587,11 +3011,13 @@ function TreeNode({
         // KASUS 1: BELUM MEMILIKI PASANGAN -> 1 KARTU TUNGGAL
         <div className="relative flex flex-col items-center">
           <PersonBox 
+            id={`tree-member-${node.id}`}
             name={node.name} 
             gender={node.gender} 
             isAlive={node.isAlive} 
             photo={node.photo} 
             label={customLabel || (isRoot ? 'Puncak Silsilah' : undefined)}
+            isHighlighted={Boolean(highlightedTarget?.memberId === node.id)}
             onClick={(e) => { e.stopPropagation(); onOpenProfile(node, false); }} 
           />
 
@@ -2616,6 +3042,17 @@ function TreeNode({
           hasChildren={hasChildren}
           isExpanded={isExpanded}
           onToggleExpand={() => setIsExpanded(!isExpanded)}
+          isMemberHighlighted={Boolean(
+            highlightedTarget?.memberId === node.id || 
+            (highlightedTarget?.name && node.name.toLowerCase().includes(highlightedTarget.name.toLowerCase()))
+          )}
+          isSpouseHighlighted={Boolean(
+            (highlightedTarget?.spouseName && spouses[0].name && highlightedTarget.spouseName.trim().toLowerCase() === spouses[0].name.trim().toLowerCase()) ||
+            (highlightedTarget?.name && spouses[0].name && (
+              spouses[0].name.toLowerCase().includes(highlightedTarget.name.toLowerCase()) ||
+              highlightedTarget.name.toLowerCase().includes(spouses[0].name.toLowerCase())
+            ))
+          )}
         />
       ) : (
         // KASUS 3: MEMILIKI LEBIH DARI 1 PASANGAN (MENIKAH LAGI / POLIGAMI, CONTOH: MASRURON)
@@ -2649,6 +3086,17 @@ function TreeNode({
                     hasChildren={hasSpouseChildren}
                     isExpanded={isExpanded}
                     onToggleExpand={() => setIsExpanded(!isExpanded)}
+                    isMemberHighlighted={Boolean(
+                      highlightedTarget?.memberId === node.id || 
+                      (highlightedTarget?.name && node.name.toLowerCase().includes(highlightedTarget.name.toLowerCase()))
+                    )}
+                    isSpouseHighlighted={Boolean(
+                      (highlightedTarget?.spouseName && sp.name && highlightedTarget.spouseName.trim().toLowerCase() === sp.name.trim().toLowerCase()) ||
+                      (highlightedTarget?.name && sp.name && (
+                        sp.name.toLowerCase().includes(highlightedTarget.name.toLowerCase()) ||
+                        highlightedTarget.name.toLowerCase().includes(sp.name.toLowerCase())
+                      ))
+                    )}
                   />
 
                   {/* Keturunan Khusus dari Pasangan ini */}
@@ -2676,6 +3124,7 @@ function TreeNode({
                                 onOpenProfile={onOpenProfile}
                                 isRoot={false}
                                 globalExpandAll={globalExpandAll}
+                                highlightedTarget={highlightedTarget}
                               />
                             </div>
                           );
@@ -2718,6 +3167,7 @@ function TreeNode({
                     onOpenProfile={onOpenProfile} 
                     isRoot={false} 
                     globalExpandAll={globalExpandAll} 
+                    highlightedTarget={highlightedTarget}
                   />
                 </div>
               );
@@ -2738,7 +3188,7 @@ function ProfilePopupCard({
   initialTarget: FamilyRelationTarget; 
   members: Member[]; 
   onClose: () => void;
-  onNavigateToTree?: () => void;
+  onNavigateToTree?: (target: FamilyRelationTarget) => void;
 }) {
   const [currentTarget, setCurrentTarget] = useState<FamilyRelationTarget>(initialTarget);
 
@@ -2910,7 +3360,7 @@ function ProfilePopupCard({
           <div className="pt-2">
             <button 
               onClick={() => {
-                onNavigateToTree?.();
+                onNavigateToTree?.(currentTarget);
                 onClose();
               }}
               className="w-full bg-[#1b4332] hover:bg-[#143326] active:scale-[0.98] text-white font-bold py-3.5 px-6 rounded-full shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 text-sm cursor-pointer"
@@ -2932,12 +3382,14 @@ function AnggotaTab({
   members, 
   isAdmin, 
   showToast,
-  onNavigateTab
+  onNavigateTab,
+  onFocusInTree
 }: { 
   members: Member[]; 
   isAdmin: boolean; 
   showToast: (m: string, t?: 'success' | 'error') => void;
   onNavigateTab?: (tab: 'dash' | 'pohon' | 'anggota' | 'agenda' | 'kas' | 'iuran') => void;
+  onFocusInTree?: (target: { memberId?: number; spouseName?: string; name?: string }) => void;
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -3267,8 +3719,12 @@ function AnggotaTab({
           initialTarget={selectedTarget} 
           members={members} 
           onClose={() => setSelectedTarget(null)} 
-          onNavigateToTree={() => {
-            onNavigateTab?.('pohon');
+          onNavigateToTree={(target) => {
+            onFocusInTree?.({
+              memberId: target.member.id,
+              spouseName: target.isSpouse ? (target.spouseObj?.name || target.member.spouse) : undefined,
+              name: target.isSpouse ? (target.spouseObj?.name || target.member.spouse) : target.member.name
+            });
             setSelectedTarget(null);
           }}
         />
