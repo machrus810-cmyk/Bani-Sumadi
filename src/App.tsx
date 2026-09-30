@@ -408,12 +408,7 @@ export function compareIuranSessionsDescending(a: IuranSession, b: IuranSession)
 const rawInitialMembers: Member[] = [
   { id: 1, name: "Mbah KH. Sumadi", isAlive: false, gender: "L", parentId: null, spouse: "", domicile: "Pondok Pesantren", phone: "-", birthDate: "1935-01-01", deathDate: "2005-05-10", photo: "", spousePhoto: "", spouseIsAlive: false, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "" },
   { id: 2, name: "Mbah Munasikah (Istri 1)", isAlive: false, gender: "P", parentId: null, relationType: 'spouse', spouseOfId: 1, spouse: "", domicile: "Pondok Pesantren", phone: "-", birthDate: "1938-03-12", deathDate: "2010-08-20", photo: "", spousePhoto: "", spouseIsAlive: false, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "", branch: "istri1" },
-  { id: 3, name: "Mbah Masripah (Istri 2)", isAlive: false, gender: "P", parentId: null, relationType: 'spouse', spouseOfId: 1, spouse: "", domicile: "Pondok Pesantren", phone: "-", birthDate: "1942-07-22", deathDate: "2015-11-05", photo: "", spousePhoto: "", spouseIsAlive: false, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "", branch: "istri2" },
-  { id: 4, name: "Musyarrifin", isAlive: true, gender: "L", parentId: 2, motherId: 2, branch: "istri1", relationType: 'child', spouse: "", domicile: "Jawa Timur", phone: "-", birthDate: "1960-01-01", deathDate: null, photo: "", spousePhoto: "", spouseIsAlive: true, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "" },
-  { id: 5, name: "Masluri", isAlive: true, gender: "L", parentId: 3, motherId: 3, branch: "istri2", relationType: 'child', spouse: "", domicile: "Jawa Timur", phone: "-", birthDate: "1965-02-15", deathDate: null, photo: "", spousePhoto: "", spouseIsAlive: true, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "" },
-  { id: 6, name: "Masiroh", isAlive: true, gender: "P", parentId: 3, motherId: 3, branch: "istri2", relationType: 'child', spouse: "", domicile: "Jawa Timur", phone: "-", birthDate: "1968-05-20", deathDate: null, photo: "", spousePhoto: "", spouseIsAlive: true, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "" },
-  { id: 7, name: "Masruron", isAlive: true, gender: "L", parentId: 3, motherId: 3, branch: "istri2", relationType: 'child', spouse: "", domicile: "Jawa Timur", phone: "-", birthDate: "1972-08-10", deathDate: null, photo: "", spousePhoto: "", spouseIsAlive: true, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "" },
-  { id: 8, name: "Masfir", isAlive: true, gender: "L", parentId: 3, motherId: 3, branch: "istri2", relationType: 'child', spouse: "", domicile: "Jawa Timur", phone: "-", birthDate: "1975-11-25", deathDate: null, photo: "", spousePhoto: "", spouseIsAlive: true, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "" }
+  { id: 3, name: "Mbah Masripah (Istri 2)", isAlive: false, gender: "P", parentId: null, relationType: 'spouse', spouseOfId: 1, spouse: "", domicile: "Pondok Pesantren", phone: "-", birthDate: "1942-07-22", deathDate: "2015-11-05", photo: "", spousePhoto: "", spouseIsAlive: false, spouseDomicile: "", spousePhone: "", spouseBirthDate: "", spouseDeathDate: "", branch: "istri2" }
 ];
 
 const initialMembers: Member[] = rawInitialMembers.map((m, idx) => ({ ...m, order: idx }));
@@ -573,13 +568,6 @@ export default function BaniSumadiApp() {
           if (snap.empty) {
             for (const item of data) {
               await setDoc(getDocRef(name, item.id), item);
-            }
-          } else if (name === 'members') {
-            const existingIds = new Set(snap.docs.map(d => Number(d.id)));
-            for (const item of data) {
-              if (!existingIds.has(item.id)) {
-                await setDoc(getDocRef(name, item.id), item);
-              }
             }
           }
         } catch (err) {
