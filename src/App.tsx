@@ -5,7 +5,7 @@ import {
   ChevronRight, Camera, Image as ImageIcon, UploadCloud, X, Download, FolderPlus,
   Minus, Maximize, FileText, CheckCircle, Lock, ShieldCheck,
   ArrowUp, ArrowDown, GripVertical, MapPin, Infinity as InfinityIcon, Phone,
-  TrendingUp, TrendingDown, ArrowDownLeft, ArrowUpRight
+  TrendingUp, TrendingDown, ArrowDownLeft, ArrowUpRight, Layers
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -298,6 +298,156 @@ export const getMemberParentName = (member: Member, allMembers: Member[]): strin
   }
   return '-';
 };
+
+// =========================================================================
+// PERHITUNGAN GENERASI ANGGOTA SILSILAH KELUARGA BANI KH. SUMADI
+// Generasi 1: Mbah KH. Sumadi dan kedua istrinya (Mbah Munasikah & Mbah Masripah)
+// Generasi 2: Anak-anak dari Generasi 1
+// Generasi 3: Anak-anak dari Generasi 2 (Cucu)
+// Generasi 4: Anak-anak dari Generasi 3 (Cicit), dan seterusnya
+// =========================================================================
+export function getMemberGeneration(m: Member, allMembers: Member[]): number {
+  const memberMap = new Map<number, Member>();
+  allMembers.forEach(mem => memberMap.set(mem.id, mem));
+
+  const isGen1 = (item: Member): boolean => {
+    if (item.id === 1 || item.id === 2 || item.id === 3) return true;
+    const nameLower = (item.name || '').toLowerCase();
+    if (nameLower.includes('sumadi') && !item.parentId) return true;
+    if (nameLower.includes('munasikah') || nameLower.includes('masripah')) return true;
+    if (item.spouseOfId === 1) return true;
+    if (item.relationType === 'spouse' && (item.parentId === 1 || item.spouseOfId === 1)) return true;
+    return false;
+  };
+
+  const memo = new Map<number, number>();
+
+  const compute = (cur: Member, visited: Set<number>): number => {
+    if (isGen1(cur)) return 1;
+    if (memo.has(cur.id)) return memo.get(cur.id)!;
+    if (visited.has(cur.id)) return 2; // hindari siklus tak terbatas
+    visited.add(cur.id);
+
+    // Jika record ini adalah entitas pasangan dari anggota lain (relationType spouse)
+    if (cur.relationType === 'spouse' && cur.spouseOfId && cur.spouseOfId !== cur.id) {
+      const spouseMember = memberMap.get(cur.spouseOfId);
+      if (spouseMember) {
+        const gen = compute(spouseMember, visited);
+        memo.set(cur.id, gen);
+        return gen;
+      }
+    }
+
+    // Periksa parentId (ayah / orang tua utama)
+    if (cur.parentId) {
+      // Jika orang tua adalah Pemuncak Silsilah (Mbah Sumadi / Istri 1 / Istri 2)
+      if (cur.parentId === 1 || cur.parentId === 2 || cur.parentId === 3) {
+        memo.set(cur.id, 2);
+        return 2;
+      }
+      const parent = memberMap.get(cur.parentId);
+      if (parent) {
+        const parentGen = compute(parent, visited);
+        const curGen = parentGen + 1;
+        memo.set(cur.id, curGen);
+        return curGen;
+      }
+    }
+
+    // Periksa motherId (ibu)
+    if (cur.motherId) {
+      if (cur.motherId === 2 || cur.motherId === 3) {
+        memo.set(cur.id, 2);
+        return 2;
+      }
+      const mother = memberMap.get(cur.motherId);
+      if (mother) {
+        const motherGen = compute(mother, visited);
+        const curGen = motherGen + 1;
+        memo.set(cur.id, curGen);
+        return curGen;
+      }
+    }
+
+    // Anggota dengan cabang istri1 atau istri2 langsung tanpa parentId terspesifikasi
+    if (cur.branch === 'istri1' || cur.branch === 'istri2') {
+      memo.set(cur.id, 2);
+      return 2;
+    }
+
+    memo.set(cur.id, 2);
+    return 2;
+  };
+
+  return compute(m, new Set<number>());
+}
+
+export function getGenerationLabel(gen: number): { 
+  title: string; 
+  subtitle: string; 
+  badge: string; 
+  icon: string;
+  dotColor: string;
+} {
+  switch (gen) {
+    case 1:
+      return { 
+        title: 'Generasi 1', 
+        subtitle: 'Mbah KH. Sumadi & Kedua Istri', 
+        badge: 'bg-amber-100 text-amber-900 border-amber-300',
+        dotColor: 'bg-amber-500',
+        icon: '👑' 
+      };
+    case 2:
+      return { 
+        title: 'Generasi 2', 
+        subtitle: 'Anak', 
+        badge: 'bg-blue-100 text-blue-900 border-blue-300',
+        dotColor: 'bg-blue-500',
+        icon: '🌿' 
+      };
+    case 3:
+      return { 
+        title: 'Generasi 3', 
+        subtitle: 'Cucu', 
+        badge: 'bg-emerald-100 text-emerald-900 border-emerald-300',
+        dotColor: 'bg-emerald-500',
+        icon: '🍃' 
+      };
+    case 4:
+      return { 
+        title: 'Generasi 4', 
+        subtitle: 'Cicit', 
+        badge: 'bg-purple-100 text-purple-900 border-purple-300',
+        dotColor: 'bg-purple-500',
+        icon: '🌱' 
+      };
+    case 5:
+      return { 
+        title: 'Generasi 5', 
+        subtitle: 'Piut / Canggah', 
+        badge: 'bg-rose-100 text-rose-900 border-rose-300',
+        dotColor: 'bg-rose-500',
+        icon: '🌸' 
+      };
+    case 6:
+      return { 
+        title: 'Generasi 6', 
+        subtitle: 'Wareng', 
+        badge: 'bg-teal-100 text-teal-900 border-teal-300',
+        dotColor: 'bg-teal-500',
+        icon: '✨' 
+      };
+    default:
+      return { 
+        title: `Generasi ${gen}`, 
+        subtitle: `Keturunan Generasi ke-${gen}`, 
+        badge: 'bg-indigo-100 text-indigo-900 border-indigo-300',
+        dotColor: 'bg-indigo-500',
+        icon: '⭐' 
+      };
+  }
+}
 
 export interface Agenda {
   id: number;
@@ -3604,6 +3754,7 @@ function AnggotaTab({
   onFocusInTree?: (target: { memberId?: number; spouseName?: string; name?: string }) => void;
 }) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedGeneration, setSelectedGeneration] = useState<'all' | number>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Member | null>(null);
   const [selectedTarget, setSelectedTarget] = useState<FamilyRelationTarget | null>(null);
@@ -3612,13 +3763,81 @@ function AnggotaTab({
   const [dragOverMemberId, setDragOverMemberId] = useState<number | null>(null);
   const [isSavingOrder, setIsSavingOrder] = useState(false);
 
-  const filtered = members.filter(m => {
-    const q = searchTerm.toLowerCase();
-    const matchSelf = m.name.toLowerCase().includes(q) || (m.domicile && m.domicile.toLowerCase().includes(q));
-    const spouses = getMemberSpouses(m);
-    const matchSpouse = spouses.some(s => s.name.toLowerCase().includes(q) || (s.domicile && s.domicile.toLowerCase().includes(q)));
-    return matchSelf || matchSpouse;
-  });
+  // 1. Pemetaan generasi setiap anggota secara hierarki silsilah
+  const memberGenMap = useMemo(() => {
+    const map = new Map<number, number>();
+    members.forEach(m => {
+      map.set(m.id, getMemberGeneration(m, members));
+    });
+    return map;
+  }, [members]);
+
+  // 2. Daftar generasi yang tersedia di dalam silsilah keluarga
+  const availableGenerations = useMemo(() => {
+    const gens = new Set<number>();
+    gens.add(1);
+    members.forEach(m => {
+      gens.add(memberGenMap.get(m.id) || 2);
+    });
+    return Array.from(gens).sort((a, b) => a - b);
+  }, [members, memberGenMap]);
+
+  // 3. Jumlah anggota per generasi
+  const generationCounts = useMemo(() => {
+    const counts: Record<number, number> = {};
+    members.forEach(m => {
+      const g = memberGenMap.get(m.id) || 2;
+      counts[g] = (counts[g] || 0) + 1;
+    });
+    return counts;
+  }, [members, memberGenMap]);
+
+  // 4. Filter berdasarkan pencarian nama/domisili (anggota maupun pasangan)
+  const searchFiltered = useMemo(() => {
+    return members.filter(m => {
+      const q = searchTerm.toLowerCase();
+      const matchSelf = m.name.toLowerCase().includes(q) || (m.domicile && m.domicile.toLowerCase().includes(q));
+      const spouses = getMemberSpouses(m, members);
+      const matchSpouse = spouses.some(s => s.name.toLowerCase().includes(q) || (s.domicile && s.domicile.toLowerCase().includes(q)));
+      return matchSelf || matchSpouse;
+    });
+  }, [members, searchTerm]);
+
+  // 5. Filter berdasarkan pilihan dropdown generasi
+  const generationFiltered = useMemo(() => {
+    if (selectedGeneration === 'all') return searchFiltered;
+    return searchFiltered.filter(m => (memberGenMap.get(m.id) || 2) === selectedGeneration);
+  }, [searchFiltered, selectedGeneration, memberGenMap]);
+
+  // 6. Pengelompokan anggota per generasi (untuk tampilan berurutan rapi per generasi)
+  const groupedMembers = useMemo(() => {
+    if (selectedGeneration !== 'all') {
+      return [{
+        generation: selectedGeneration,
+        info: getGenerationLabel(selectedGeneration),
+        items: generationFiltered
+      }];
+    }
+
+    const groups: Array<{
+      generation: number;
+      info: ReturnType<typeof getGenerationLabel>;
+      items: Member[];
+    }> = [];
+
+    availableGenerations.forEach(gen => {
+      const items = generationFiltered.filter(m => (memberGenMap.get(m.id) || 2) === gen);
+      if (items.length > 0) {
+        groups.push({
+          generation: gen,
+          info: getGenerationLabel(gen),
+          items
+        });
+      }
+    });
+
+    return groups;
+  }, [generationFiltered, selectedGeneration, availableGenerations, memberGenMap]);
 
   const handleMoveMember = async (memberId: number, direction: 'up' | 'down') => {
     if (isSavingOrder) return;
@@ -3696,9 +3915,16 @@ function AnggotaTab({
 
   return (
     <div className="space-y-4 pb-6">
-      <div className="flex justify-between items-center mb-2">
-        <h2 className="text-xl font-bold text-gray-800">Daftar Anggota</h2>
+      {/* HEADER DAFTAR ANGGOTA */}
+      <div className="flex justify-between items-center mb-1">
+        <div>
+          <h2 className="text-xl font-bold text-gray-800">Daftar Anggota</h2>
+          <p className="text-[11px] text-gray-500">
+            Total {members.length} anggota keluarga terdaftar
+          </p>
+        </div>
       </div>
+
       {isAdmin && (
         <button 
           onClick={() => { setEditingItem(null); setIsModalOpen(true); }} 
@@ -3725,6 +3951,7 @@ function AnggotaTab({
         </div>
       )}
       
+      {/* KOTAK PENCARIAN */}
       <div className="relative">
         <Search className="absolute left-3 top-3.5 text-gray-400" size={20} />
         <input 
@@ -3733,196 +3960,339 @@ function AnggotaTab({
           value={searchTerm} 
           onChange={e => setSearchTerm(e.target.value)} 
         />
+        {searchTerm && (
+          <button 
+            onClick={() => setSearchTerm('')} 
+            className="absolute right-3 top-3.5 text-gray-400 hover:text-gray-600 p-0.5 rounded-full cursor-pointer"
+          >
+            <X size={18} />
+          </button>
+        )}
+      </div>
+
+      {/* FITUR DROPDOWN & FILTER GENERASI */}
+      <div className="bg-white p-3.5 sm:p-4 rounded-2xl shadow-xs border border-gray-200/90 space-y-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <label className="text-[11px] font-black text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+            <Layers size={15} className="text-emerald-600 flex-shrink-0" />
+            <span>Pilih Generasi Silsilah:</span>
+          </label>
+          <span className="text-[10.5px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+            {generationFiltered.length} Anggota
+          </span>
+        </div>
+
+        {/* SELECT DROPDOWN GENERASI */}
+        <div className="relative">
+          <select
+            value={selectedGeneration}
+            onChange={(e) => setSelectedGeneration(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+            className="w-full bg-gray-50 hover:bg-gray-100/80 focus:bg-white border-2 border-emerald-300 focus:border-emerald-600 text-gray-800 text-xs sm:text-sm font-bold py-3 px-3.5 rounded-xl outline-none transition shadow-2xs cursor-pointer appearance-none pr-10"
+          >
+            <option value="all">
+              🌐 Semua Generasi (Seluruh {members.length} Anggota Keluarga)
+            </option>
+            {availableGenerations.map(gen => {
+              const info = getGenerationLabel(gen);
+              const count = generationCounts[gen] || 0;
+              return (
+                <option key={gen} value={gen}>
+                  {info.icon} {info.title} — {info.subtitle} ({count} Anggota)
+                </option>
+              );
+            })}
+          </select>
+          <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-emerald-700 font-black text-xs">
+            ▼
+          </div>
+        </div>
+
+        {/* PILLS / QUICK BUTTONS GENERASI */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-0.5 pb-0.5">
+          <button
+            type="button"
+            onClick={() => setSelectedGeneration('all')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 ${
+              selectedGeneration === 'all'
+                ? 'bg-gradient-to-r from-emerald-600 to-green-700 text-white shadow-xs'
+                : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+            }`}
+          >
+            <span>🌐</span> Semua ({members.length})
+          </button>
+          {availableGenerations.map(gen => {
+            const info = getGenerationLabel(gen);
+            const count = generationCounts[gen] || 0;
+            const isSelected = selectedGeneration === gen;
+            return (
+              <button
+                key={gen}
+                type="button"
+                onClick={() => setSelectedGeneration(gen)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 ${
+                  isSelected
+                    ? 'bg-gradient-to-r from-emerald-600 to-green-700 text-white shadow-xs'
+                    : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                }`}
+              >
+                <span>{info.icon}</span>
+                <span>{info.title}</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                  isSelected ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-600'
+                }`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
       
-      <div className="space-y-4">
-        {filtered.map(member => {
-          const memberSpouses = getMemberSpouses(member);
-          const globalIndex = members.findIndex(m => m.id === member.id);
-          const isFirstInGlobal = globalIndex === 0;
-          const isLastInGlobal = globalIndex === members.length - 1;
+      {/* DAFTAR ANGGOTA DIKELOMPOKKAN PER GENERASI */}
+      <div className="space-y-6">
+        {groupedMembers.map(group => {
+          if (group.items.length === 0) return null;
 
           return (
-            <div 
-              key={member.id} 
-              onDragOver={(e) => {
-                if (isAdmin && draggedMemberId && draggedMemberId !== member.id) {
-                  e.preventDefault();
-                  if (dragOverMemberId !== member.id) setDragOverMemberId(member.id);
-                }
-              }}
-              onDragLeave={() => {
-                if (dragOverMemberId === member.id) setDragOverMemberId(null);
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                const sourceId = Number(e.dataTransfer.getData('text/plain') || draggedMemberId);
-                setDragOverMemberId(null);
-                setDraggedMemberId(null);
-                if (sourceId && sourceId !== member.id) {
-                  handleDragDrop(sourceId, member.id);
-                }
-              }}
-              className={`bg-white p-4 rounded-2xl shadow-sm border transition ${
-                dragOverMemberId === member.id 
-                  ? 'border-emerald-500 bg-emerald-50/50 ring-2 ring-emerald-300' 
-                  : 'border-gray-100 hover:shadow-md'
-              } ${draggedMemberId === member.id ? 'opacity-50' : ''}`}
-            >
-              <div className="flex gap-3 sm:gap-4 items-start relative z-10">
-                {/* DRAG HANDLE UNTUK ADMIN */}
-                {isAdmin && (
-                  <div 
-                    draggable={!searchTerm}
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData('text/plain', String(member.id));
-                      setDraggedMemberId(member.id);
-                    }}
-                    onDragEnd={() => {
-                      setDraggedMemberId(null);
-                      setDragOverMemberId(null);
-                    }}
-                    className="flex items-center text-gray-400 hover:text-emerald-700 cursor-grab active:cursor-grabbing p-1 rounded hover:bg-emerald-50 transition self-center flex-shrink-0"
-                    title="Tahan & tarik untuk menggeser posisi anggota"
-                  >
-                    <GripVertical size={20} />
-                  </div>
-                )}
-
-                <div 
-                  className={`w-16 h-16 rounded-full border-2 flex-shrink-0 flex items-center justify-center overflow-hidden cursor-pointer hover:opacity-85 transition shadow-sm ${member.gender === 'L' ? 'border-blue-200 bg-blue-50 text-blue-500' : 'border-pink-200 bg-pink-50 text-pink-500'}`} 
-                  onClick={() => openProfile(member, false)}
-                  title="Lihat profil lengkap"
-                >
-                  {member.photo ? <img src={member.photo} className="w-full h-full object-cover" alt={member.name} /> : <Users size={30} />}
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex justify-between items-start gap-1">
-                     <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                       {/* NOMOR URUT POSISI ANGGOTA */}
-                       <span className="text-[9.5px] font-black px-1.5 py-0.5 rounded-md bg-emerald-100/90 text-emerald-800 border border-emerald-300 flex-shrink-0" title="Nomor urut posisi anggota">
-                         #{globalIndex + 1}
-                       </span>
-                       <h3 
-                         className="font-bold text-lg text-gray-800 truncate cursor-pointer hover:text-green-700" 
-                         onClick={() => openProfile(member, false)}
-                       >
-                         {member.name}
-                       </h3>
-                     </div>
-
-                     {isAdmin && (
-                       <div className="flex items-center gap-1.5 flex-shrink-0">
-                         {/* TOMBOL GESER POSISI KE ATAS & KE BAWAH */}
-                         <div className="flex items-center bg-gray-100 p-0.5 rounded-lg border border-gray-200">
-                           <button 
-                             type="button"
-                             disabled={isFirstInGlobal || isSavingOrder} 
-                             onClick={() => handleMoveMember(member.id, 'up')} 
-                             className="p-1.5 text-gray-700 hover:text-emerald-700 hover:bg-white rounded cursor-pointer disabled:opacity-25 disabled:cursor-not-allowed transition" 
-                             title="Geser posisi ke atas (↑)"
-                           >
-                             <ArrowUp size={14}/>
-                           </button>
-                           <button 
-                             type="button"
-                             disabled={isLastInGlobal || isSavingOrder} 
-                             onClick={() => handleMoveMember(member.id, 'down')} 
-                             className="p-1.5 text-gray-700 hover:text-emerald-700 hover:bg-white rounded cursor-pointer disabled:opacity-25 disabled:cursor-not-allowed transition" 
-                             title="Geser posisi ke bawah (↓)"
-                           >
-                             <ArrowDown size={14}/>
-                           </button>
-                         </div>
-
-                         <button 
-                           onClick={() => { setEditingItem(member); setIsModalOpen(true); }} 
-                           className="text-blue-600 bg-blue-50 hover:bg-blue-100 p-1.5 rounded-lg cursor-pointer transition"
-                           title="Edit Anggota"
-                         >
-                           <Edit2 size={14}/>
-                         </button>
-                         <button 
-                           onClick={() => setItemToDelete(member.id)} 
-                           className="text-red-600 bg-red-50 hover:bg-red-100 p-1.5 rounded-lg cursor-pointer transition"
-                           title="Hapus Anggota"
-                         >
-                           <Trash2 size={14}/>
-                         </button>
-                       </div>
-                     )}
-                  </div>
-
-                  <div className="mt-1 mb-2 flex items-center gap-2">
-                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full border ${member.isAlive ? 'text-green-600 bg-green-50 border-green-200' : 'text-gray-500 bg-gray-100 border-gray-200'}`}>
-                      {member.isAlive ? 'HIDUP' : 'ALM'}
-                    </span>
-                    <span className="text-[10px] text-gray-400 font-semibold">
-                      {member.gender === 'L' ? 'Laki-laki' : 'Perempuan'}
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-gray-600 space-y-1">
-                    <p className="truncate">Ortu: <span className="font-semibold text-gray-800">{getMemberParentName(member, members)}</span></p>
-                    <p className="break-words">Domisili: <span className="font-semibold text-gray-800">{member.domicile || '-'}</span></p>
-                    {member.phone && member.phone !== '-' && (
-                      <p className="break-words">No HP: <span className="font-semibold text-gray-800">{member.phone}</span></p>
-                    )}
+            <div key={group.generation} className="space-y-3">
+              {/* HEADER SECTION GENERASI */}
+              <div className="sticky top-0 z-20 bg-gray-100/95 backdrop-blur-sm py-2 px-1 flex items-center justify-between border-b border-gray-200">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-xl flex-shrink-0">{group.info.icon}</span>
+                  <div className="min-w-0">
+                    <h3 className="text-xs sm:text-sm font-black text-gray-800 tracking-wide flex items-center gap-1.5 flex-wrap">
+                      <span>{group.info.title}</span>
+                      <span className="text-[11px] font-semibold text-gray-500">
+                        • {group.info.subtitle}
+                      </span>
+                    </h3>
                   </div>
                 </div>
+                <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border shadow-2xs flex-shrink-0 ${group.info.badge}`}>
+                  {group.items.length} Orang
+                </span>
               </div>
 
-              {/* SEMUA PASANGAN ANGGOTA (BISA > 1 PASANGAN) */}
-              {memberSpouses.length > 0 && (
-                <div className="mt-3.5 pt-3 border-t border-gray-100 space-y-2.5">
-                  <div className="flex items-center justify-between text-[11px] font-bold text-gray-500 px-1">
-                    <span>Pasangan ({memberSpouses.length}):</span>
-                    {memberSpouses.length > 1 && (
-                      <span className="text-[10px] text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
-                        {memberSpouses.length} Pasangan
-                      </span>
-                    )}
-                  </div>
+              {/* LIST KARTU ANGGOTA DALAM GENERASI INI */}
+              <div className="space-y-3.5">
+                {group.items.map(member => {
+                  const memberSpouses = getMemberSpouses(member, members);
+                  const globalIndex = members.findIndex(m => m.id === member.id);
+                  const isFirstInGlobal = globalIndex === 0;
+                  const isLastInGlobal = globalIndex === members.length - 1;
+                  const memberGen = memberGenMap.get(member.id) || 2;
+                  const genBadge = getGenerationLabel(memberGen);
 
-                  {memberSpouses.map((sp, sIdx) => (
-                    <div key={sp.id || sIdx} className="bg-gray-50/80 p-2.5 rounded-xl border border-gray-150 flex gap-3 items-center">
-                      <div 
-                        className={`w-11 h-11 rounded-full border-2 flex-shrink-0 flex items-center justify-center overflow-hidden cursor-pointer hover:opacity-80 transition shadow-sm ${member.gender === 'L' ? 'border-pink-200 bg-pink-50 text-pink-500' : 'border-blue-200 bg-blue-50 text-blue-500'}`} 
-                        onClick={() => openProfile(member, true, sp)}
-                        title="Klik untuk melihat profil pasangan"
-                      >
-                         {sp.photo ? <img src={sp.photo} className="w-full h-full object-cover" alt={sp.name} /> : <Users size={20} />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p 
-                            className="font-bold text-sm text-gray-800 truncate cursor-pointer hover:text-green-700" 
-                            onClick={() => openProfile(member, true, sp)}
+                  return (
+                    <div 
+                      key={member.id} 
+                      onDragOver={(e) => {
+                        if (isAdmin && draggedMemberId && draggedMemberId !== member.id) {
+                          e.preventDefault();
+                          if (dragOverMemberId !== member.id) setDragOverMemberId(member.id);
+                        }
+                      }}
+                      onDragLeave={() => {
+                        if (dragOverMemberId === member.id) setDragOverMemberId(null);
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const sourceId = Number(e.dataTransfer.getData('text/plain') || draggedMemberId);
+                        setDragOverMemberId(null);
+                        setDraggedMemberId(null);
+                        if (sourceId && sourceId !== member.id) {
+                          handleDragDrop(sourceId, member.id);
+                        }
+                      }}
+                      className={`bg-white p-4 rounded-2xl shadow-sm border transition ${
+                        dragOverMemberId === member.id 
+                          ? 'border-emerald-500 bg-emerald-50/50 ring-2 ring-emerald-300' 
+                          : 'border-gray-150 hover:shadow-md'
+                      } ${draggedMemberId === member.id ? 'opacity-50' : ''}`}
+                    >
+                      <div className="flex gap-3 sm:gap-4 items-start relative z-10">
+                        {/* DRAG HANDLE UNTUK ADMIN */}
+                        {isAdmin && (
+                          <div 
+                            draggable={!searchTerm && selectedGeneration === 'all'}
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData('text/plain', String(member.id));
+                              setDraggedMemberId(member.id);
+                            }}
+                            onDragEnd={() => {
+                              setDraggedMemberId(null);
+                              setDragOverMemberId(null);
+                            }}
+                            className="flex items-center text-gray-400 hover:text-emerald-700 cursor-grab active:cursor-grabbing p-1 rounded hover:bg-emerald-50 transition self-center flex-shrink-0"
+                            title="Tahan & tarik untuk menggeser posisi anggota"
                           >
-                            {sp.name}
-                          </p>
-                          <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full border ${sp.isAlive ? 'text-green-600 bg-green-50 border-green-200' : 'text-gray-500 bg-gray-100 border-gray-200'}`}>
-                            {sp.isAlive ? 'HIDUP' : 'ALM'}
-                          </span>
-                          {memberSpouses.length > 1 && (
-                            <span className="text-[9px] bg-purple-100 text-purple-800 border border-purple-200 font-bold px-1.5 py-0.2 rounded">
-                              {member.gender === 'L' ? `Istri ${sIdx + 1}` : `Suami ${sIdx + 1}`}
-                            </span>
-                          )}
+                            <GripVertical size={20} />
+                          </div>
+                        )}
+
+                        <div 
+                          className={`w-16 h-16 rounded-full border-2 flex-shrink-0 flex items-center justify-center overflow-hidden cursor-pointer hover:opacity-85 transition shadow-sm ${member.gender === 'L' ? 'border-blue-200 bg-blue-50 text-blue-500' : 'border-pink-200 bg-pink-50 text-pink-500'}`} 
+                          onClick={() => openProfile(member, false)}
+                          title="Lihat profil lengkap"
+                        >
+                          {member.photo ? <img src={member.photo} className="w-full h-full object-cover" alt={member.name} /> : <Users size={30} />}
                         </div>
-                        <div className="text-[10px] text-gray-500 flex flex-wrap gap-x-3 mt-0.5">
-                          {sp.domicile && <span className="truncate">📍 {sp.domicile}</span>}
-                          {sp.phone && sp.phone !== '-' && <span className="truncate">📞 {sp.phone}</span>}
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-start gap-1">
+                             <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                               {/* NOMOR URUT POSISI ANGGOTA */}
+                               <span className="text-[9.5px] font-black px-1.5 py-0.5 rounded-md bg-emerald-100/90 text-emerald-800 border border-emerald-300 flex-shrink-0" title="Nomor urut posisi anggota">
+                                 #{globalIndex + 1}
+                               </span>
+                               <h3 
+                                 className="font-bold text-lg text-gray-800 truncate cursor-pointer hover:text-green-700" 
+                                 onClick={() => openProfile(member, false)}
+                               >
+                                 {member.name}
+                               </h3>
+                             </div>
+
+                             {isAdmin && (
+                               <div className="flex items-center gap-1.5 flex-shrink-0">
+                                 {/* TOMBOL GESER POSISI KE ATAS & KE BAWAH */}
+                                 <div className="flex items-center bg-gray-100 p-0.5 rounded-lg border border-gray-200">
+                                   <button 
+                                     type="button"
+                                     disabled={isFirstInGlobal || isSavingOrder} 
+                                     onClick={() => handleMoveMember(member.id, 'up')} 
+                                     className="p-1.5 text-gray-700 hover:text-emerald-700 hover:bg-white rounded cursor-pointer disabled:opacity-25 disabled:cursor-not-allowed transition" 
+                                     title="Geser posisi ke atas (↑)"
+                                   >
+                                     <ArrowUp size={14}/>
+                                   </button>
+                                   <button 
+                                     type="button"
+                                     disabled={isLastInGlobal || isSavingOrder} 
+                                     onClick={() => handleMoveMember(member.id, 'down')} 
+                                     className="p-1.5 text-gray-700 hover:text-emerald-700 hover:bg-white rounded cursor-pointer disabled:opacity-25 disabled:cursor-not-allowed transition" 
+                                     title="Geser posisi ke bawah (↓)"
+                                   >
+                                     <ArrowDown size={14}/>
+                                   </button>
+                                 </div>
+
+                                 <button 
+                                   onClick={() => { setEditingItem(member); setIsModalOpen(true); }} 
+                                   className="text-blue-600 bg-blue-50 hover:bg-blue-100 p-1.5 rounded-lg cursor-pointer transition"
+                                   title="Edit Anggota"
+                                 >
+                                   <Edit2 size={14}/>
+                                 </button>
+                                 <button 
+                                   onClick={() => setItemToDelete(member.id)} 
+                                   className="text-red-600 bg-red-50 hover:bg-red-100 p-1.5 rounded-lg cursor-pointer transition"
+                                   title="Hapus Anggota"
+                                 >
+                                   <Trash2 size={14}/>
+                                 </button>
+                               </div>
+                             )}
+                          </div>
+
+                          {/* BADGES: GENERASI, STATUS HIDUP/ALM, GENDER */}
+                          <div className="mt-1.5 mb-2 flex flex-wrap items-center gap-1.5">
+                            <span className={`text-[9px] font-black px-2 py-0.5 rounded-full border shadow-2xs flex items-center gap-1 ${genBadge.badge}`}>
+                              <span>{genBadge.icon}</span>
+                              <span>{genBadge.title}</span>
+                            </span>
+                            <span className={`text-[9px] font-black px-2 py-0.5 rounded-full border ${member.isAlive ? 'text-green-600 bg-green-50 border-green-200' : 'text-gray-500 bg-gray-100 border-gray-200'}`}>
+                              {member.isAlive ? 'HIDUP' : 'ALM'}
+                            </span>
+                            <span className="text-[10px] text-gray-400 font-semibold">
+                              {member.gender === 'L' ? 'Laki-laki' : 'Perempuan'}
+                            </span>
+                          </div>
+
+                          <div className="text-[11px] text-gray-600 space-y-1">
+                            <p className="truncate">Ortu: <span className="font-semibold text-gray-800">{getMemberParentName(member, members)}</span></p>
+                            <p className="break-words">Domisili: <span className="font-semibold text-gray-800">{member.domicile || '-'}</span></p>
+                            {member.phone && member.phone !== '-' && (
+                              <p className="break-words">No HP: <span className="font-semibold text-gray-800">{member.phone}</span></p>
+                            )}
+                          </div>
                         </div>
                       </div>
+
+                      {/* SEMUA PASANGAN ANGGOTA (BISA > 1 PASANGAN) */}
+                      {memberSpouses.length > 0 && (
+                        <div className="mt-3.5 pt-3 border-t border-gray-100 space-y-2.5">
+                          <div className="flex items-center justify-between text-[11px] font-bold text-gray-500 px-1">
+                            <span>Pasangan ({memberSpouses.length}):</span>
+                            {memberSpouses.length > 1 && (
+                              <span className="text-[10px] text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
+                                {memberSpouses.length} Pasangan
+                              </span>
+                            )}
+                          </div>
+
+                          {memberSpouses.map((sp, sIdx) => (
+                            <div key={sp.id || sIdx} className="bg-gray-50/80 p-2.5 rounded-xl border border-gray-150 flex gap-3 items-center">
+                              <div 
+                                className={`w-11 h-11 rounded-full border-2 flex-shrink-0 flex items-center justify-center overflow-hidden cursor-pointer hover:opacity-80 transition shadow-sm ${member.gender === 'L' ? 'border-pink-200 bg-pink-50 text-pink-500' : 'border-blue-200 bg-blue-50 text-blue-500'}`} 
+                                onClick={() => openProfile(member, true, sp)}
+                                title="Klik untuk melihat profil pasangan"
+                              >
+                                 {sp.photo ? <img src={sp.photo} className="w-full h-full object-cover" alt={sp.name} /> : <Users size={20} />}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p 
+                                    className="font-bold text-sm text-gray-800 truncate cursor-pointer hover:text-green-700" 
+                                    onClick={() => openProfile(member, true, sp)}
+                                  >
+                                    {sp.name}
+                                  </p>
+                                  <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full border ${sp.isAlive ? 'text-green-600 bg-green-50 border-green-200' : 'text-gray-500 bg-gray-100 border-gray-200'}`}>
+                                    {sp.isAlive ? 'HIDUP' : 'ALM'}
+                                  </span>
+                                  {memberSpouses.length > 1 && (
+                                    <span className="text-[9px] bg-purple-100 text-purple-800 border border-purple-200 font-bold px-1.5 py-0.2 rounded">
+                                      {member.gender === 'L' ? `Istri ${sIdx + 1}` : `Suami ${sIdx + 1}`}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[10px] text-gray-500 flex flex-wrap gap-x-3 mt-0.5">
+                                  {sp.domicile && <span className="truncate">📍 {sp.domicile}</span>}
+                                  {sp.phone && sp.phone !== '-' && <span className="truncate">📞 {sp.phone}</span>}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  ))}
-                </div>
-              )}
+                  );
+                })}
+              </div>
             </div>
           );
         })}
-        {filtered.length === 0 && <p className="text-center text-gray-400 py-10 text-sm">Tidak ada data.</p>}
+
+        {generationFiltered.length === 0 && (
+          <div className="text-center bg-white p-8 rounded-2xl border border-gray-200 shadow-2xs space-y-2">
+            <p className="text-3xl">🔍</p>
+            <p className="text-sm font-bold text-gray-700">Tidak ada data anggota ditemukan</p>
+            <p className="text-xs text-gray-400">
+              {searchTerm 
+                ? `Tidak ditemukan nama "${searchTerm}" pada filter yang dipilih.` 
+                : 'Belum ada anggota yang terdaftar pada generasi ini.'}
+            </p>
+            {(searchTerm || selectedGeneration !== 'all') && (
+              <button
+                onClick={() => { setSearchTerm(''); setSelectedGeneration('all'); }}
+                className="mt-2 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition cursor-pointer"
+              >
+                Reset Filter & Pencarian
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {isModalOpen && <ModalFormAnggota member={editingItem} members={members} showToast={showToast} onClose={() => setIsModalOpen(false)} />}
