@@ -5,7 +5,9 @@ import {
   ChevronRight, Camera, Image as ImageIcon, UploadCloud, X, Download, FolderPlus,
   Minus, Maximize, FileText, CheckCircle, Lock, ShieldCheck,
   ArrowUp, ArrowDown, GripVertical, MapPin, Infinity as InfinityIcon, Phone,
-  TrendingUp, TrendingDown, ArrowDownLeft, ArrowUpRight, Layers
+  TrendingUp, TrendingDown, ArrowDownLeft, ArrowUpRight, Layers,
+  Clock, ChevronDown, Check, Sparkles, Filter,
+  Bell, BellRing, Volume2, VolumeX
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -30,6 +32,21 @@ import { PWAInstallButton } from './PWAInstallButton';
 import { OfflineIndicator } from './OfflineIndicator';
 import { SplashScreen } from './SplashScreen';
 import { toBlob, toJpeg } from 'html-to-image';
+import {
+  playNotificationChime,
+  startAlarmLoop,
+  stopAlarmSound,
+  isAlarmPlaying,
+  getNotificationPermissionStatus,
+  requestNotificationPermission,
+  isAlarmSoundEnabled,
+  setAlarmSoundEnabled,
+  getAgendaTargetTimestamp,
+  syncAgendasToServiceWorker,
+  triggerAgendaAlarm,
+  testAlarmSoundAndNotification,
+  unlockAudioContext
+} from './audioNotification';
 
 // Helper unduh langsung file JPEG ke memori / folder unduhan perangkat (Android, iOS, dan Desktop)
 export async function exportElementAsJPEG(
@@ -452,6 +469,7 @@ export function getGenerationLabel(gen: number): {
 export interface Agenda {
   id: number;
   date: string;
+  time?: string;
   title: string;
   location: string;
   desc: string;
@@ -644,8 +662,8 @@ const rawInitialMembers: Member[] = [
 const initialMembers: Member[] = rawInitialMembers.map((m, idx) => ({ ...m, order: idx }));
 
 const initialAgendas: Agenda[] = [
-  { id: 1, date: "2026-06-15", title: "Arisan Keluarga", location: "Rumah Pak Budi, Jakarta", desc: "Membahas persiapan Idul Adha" },
-  { id: 2, date: "2026-08-17", title: "Kumpul 17an Bani Sumadi", location: "Villa Puncak", desc: "Acara santai dan lomba keluarga" }
+  { id: 1, date: "2026-11-15", time: "08:00", title: "Reuni Akbar & Silaturrahim Bani KH. Sumadi ke-10", location: "Kediaman Utama Keluarga, Tuban / Lamongan", desc: "Pertemuan akbar seluruh keturunan dan keluarga besar Bani KH. Sumadi" },
+  { id: 2, date: "2026-12-25", time: "09:00", title: "Pengajian & Doa Bersama Akhir Tahun", location: "Pondok Pesantren", desc: "Khataman Al-Qur'an dan doa bersama untuk masyayikh" }
 ];
 
 const initialTransactions: Transaction[] = [
@@ -764,6 +782,13 @@ export default function BaniSumadiApp() {
             console.warn("Custom token auth skipped:", tokenErr);
           }
         }
+        if (!auth.currentUser) {
+          try {
+            await signInAnonymously(auth);
+          } catch (anonErr) {
+            console.warn("Anonymous auth notice:", anonErr);
+          }
+        }
       } catch (e) {
         console.warn("Firebase init notice:", e);
       } finally {
@@ -772,6 +797,64 @@ export default function BaniSumadiApp() {
     };
     initFirebase();
   }, []);
+
+  // Mutator Instan State (Optimistic Updates agar perubahan admin langsung tampil tanpa perlu refresh)
+  const handleUpdateMember = (updated: Member) => {
+    setMembers(prev => {
+      const exists = prev.some(m => m.id === updated.id);
+      const next = exists ? prev.map(m => m.id === updated.id ? updated : m) : [...prev, updated];
+      return next.sort((a, b) => {
+        const ordA = typeof a.order === 'number' ? a.order : a.id;
+        const ordB = typeof b.order === 'number' ? b.order : b.id;
+        return ordA - ordB;
+      });
+    });
+  };
+
+  const handleDeleteMember = (id: number) => {
+    setMembers(prev => prev.filter(m => m.id !== id).map(m => m.parentId === id ? { ...m, parentId: null } : m));
+  };
+
+  const handleReorderMembers = (newMembers: Member[]) => {
+    setMembers(newMembers);
+  };
+
+  const handleUpdateAgenda = (updated: Agenda) => {
+    setAgendas(prev => {
+      const exists = prev.some(a => a.id === updated.id);
+      return exists ? prev.map(a => a.id === updated.id ? updated : a) : [...prev, updated];
+    });
+  };
+
+  const handleDeleteAgenda = (id: number) => {
+    setAgendas(prev => prev.filter(a => a.id !== id));
+  };
+
+  const handleUpdateKasSession = (updated: KasSession) => {
+    setKasSessions(prev => {
+      const exists = prev.some(s => s.id === updated.id);
+      return exists ? prev.map(s => s.id === updated.id ? updated : s) : [updated, ...prev];
+    });
+  };
+
+  const handleDeleteKasSession = (id: number) => {
+    setKasSessions(prev => prev.filter(s => s.id !== id));
+  };
+
+  const handleUpdateIuranSession = (updated: IuranSession) => {
+    setIuranSessions(prev => {
+      const exists = prev.some(s => s.id === updated.id);
+      return exists ? prev.map(s => s.id === updated.id ? updated : s) : [updated, ...prev];
+    });
+  };
+
+  const handleDeleteIuranSession = (id: number) => {
+    setIuranSessions(prev => prev.filter(s => s.id !== id));
+  };
+
+  const handleUpdateSliderImages = (images: SliderImage[]) => {
+    setSliderImages(images);
+  };
 
   // Sync Real-Time Firestore Cloud Database
   useEffect(() => {
@@ -860,7 +943,90 @@ export default function BaniSumadiApp() {
     return transactions.reduce((acc, curr) => curr.type === 'in' ? acc + Number(curr.amount || 0) : acc - Number(curr.amount || 0), 0);
   }, [latestKasSession, transactions]);
   const formatRupiah = (number: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number);
-  const nextAgenda = [...agendas].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).find(a => new Date(a.date) >= new Date()) || agendas[0];
+
+  const nextAgenda = useMemo(() => {
+    if (agendas.length === 0) return null;
+    const nowTime = Date.now();
+    const sorted = [...agendas].sort((a, b) => getAgendaTargetTimestamp(a) - getAgendaTargetTimestamp(b));
+    // Cari agenda terdekat yang belum lewat atau sedang berlangsung (toleransi rentang 18 jam)
+    const upcoming = sorted.find(a => getAgendaTargetTimestamp(a) + (18 * 60 * 60 * 1000) > nowTime);
+    return upcoming || sorted[sorted.length - 1] || null;
+  }, [agendas]);
+
+  // State untuk agenda yang alarm suaranya sedang berdering aktif
+  const [ringingAgenda, setRingingAgenda] = useState<Agenda | null>(null);
+
+  // 1. Sinkronisasi otomatis daftar agenda ke Service Worker PWA
+  // Memastikan notifikasi dan bunyi alarm berbunyi tepat waktu meskipun aplikasi sedang ditutup
+  useEffect(() => {
+    if (agendas.length > 0) {
+      syncAgendasToServiceWorker(agendas);
+    }
+  }, [agendas]);
+
+  // 2. Tangkap parameter URL (?alarm=1) dan pesan Service Worker saat dibuka dari notifikasi latar belakang
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('alarm') === '1') {
+      const agendaId = Number(params.get('agendaId'));
+      const target = agendas.find(a => a.id === agendaId) || nextAgenda;
+      if (target) {
+        setRingingAgenda(target);
+        if (isAlarmSoundEnabled()) {
+          startAlarmLoop();
+        }
+      }
+    }
+
+    const handleSWMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'TRIGGER_ALARM_SOUND') {
+        const agendaId = event.data.agendaId;
+        const target = agendas.find(a => a.id === agendaId) || nextAgenda;
+        if (target) {
+          setRingingAgenda(target);
+          if (isAlarmSoundEnabled()) {
+            startAlarmLoop();
+          }
+        }
+      }
+    };
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', handleSWMessage);
+    }
+    return () => {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.removeEventListener('message', handleSWMessage);
+      }
+    };
+  }, [agendas, nextAgenda]);
+
+  // 3. Loop pemeriksaan hitungan mundur tiba saat tab terbuka / di latar belakang
+  useEffect(() => {
+    const checkAllAgendasDue = () => {
+      const now = Date.now();
+      for (const a of agendas) {
+        const targetTime = getAgendaTargetTimestamp(a);
+        if (targetTime > 0) {
+          const diff = now - targetTime;
+          // Jika waktu telah tiba dalam 1 jam terakhir dan belum pernah dibunyikan
+          if (diff >= 0 && diff < 60 * 60 * 1000) {
+            triggerAgendaAlarm(a, () => {
+              setRingingAgenda(a);
+            });
+          }
+        }
+      }
+    };
+
+    const timer = setInterval(checkAllAgendasDue, 2000);
+    return () => clearInterval(timer);
+  }, [agendas]);
+
+  const handleStopGlobalAlarm = () => {
+    stopAlarmSound();
+    setRingingAgenda(null);
+  };
 
   if (!isFirebaseReady) return <div className="min-h-screen bg-[#F0FDF4] flex items-center justify-center font-bold text-green-700">Menghubungkan Database Firebase...</div>;
 
@@ -876,6 +1042,57 @@ export default function BaniSumadiApp() {
           <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[400] px-5 py-3 rounded-full shadow-2xl font-bold text-xs text-white animate-fade-in flex items-center w-max max-w-[90%] ${toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
             {toast.type === 'success' ? <CheckCircle size={18} className="mr-2"/> : <X size={18} className="mr-2"/>}
             {toast.message}
+          </div>
+        )}
+
+        {/* MODAL / BANNER GLOBAL KETIKA ALARM AGENDA BERBUNYI */}
+        {ringingAgenda && (
+          <div className="fixed inset-x-0 top-3 z-[450] px-3 pointer-events-none flex justify-center animate-bounce-short">
+            <div className="w-full max-w-sm bg-gradient-to-r from-red-600 via-rose-700 to-amber-600 text-white rounded-3xl p-4 shadow-2xl border-2 border-amber-300 pointer-events-auto">
+              <div className="flex items-start justify-between gap-2.5">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center flex-shrink-0 animate-pulse text-2xl">
+                    🔔
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-amber-200 block truncate">
+                      Waktunya Acara Telah Tiba!
+                    </span>
+                    <h4 className="font-black text-sm text-white truncate">
+                      {ringingAgenda.title}
+                    </h4>
+                    <p className="text-[11px] text-amber-100/90 font-medium truncate">
+                      {ringingAgenda.location ? `📍 ${ringingAgenda.location}` : 'Acara keluarga dimulai sekarang'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleStopGlobalAlarm}
+                  className="p-1 rounded-xl bg-white/20 hover:bg-white/30 text-white cursor-pointer transition flex-shrink-0"
+                  title="Tutup Notifikasi Alarm"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="mt-3 pt-2.5 border-t border-white/20 flex gap-2">
+                <button
+                  onClick={handleStopGlobalAlarm}
+                  className="flex-1 py-2 px-3 bg-white text-red-700 hover:bg-amber-100 rounded-xl text-xs font-black shadow cursor-pointer transition flex items-center justify-center gap-1.5"
+                >
+                  <VolumeX size={14} /> Matikan Alarm
+                </button>
+                <button
+                  onClick={() => {
+                    handleStopGlobalAlarm();
+                    setActiveTab('agenda');
+                  }}
+                  className="py-2 px-3 bg-red-950/40 hover:bg-red-950/60 text-white border border-white/30 rounded-xl text-xs font-bold cursor-pointer transition flex items-center justify-center gap-1"
+                >
+                  <Calendar size={13} /> Buka Agenda
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -959,12 +1176,68 @@ export default function BaniSumadiApp() {
         {/* MAIN CONTENT AREA */}
         <main className="flex-1 overflow-y-auto relative bg-gray-50">
           <div className="p-4 h-full">
-             {activeTab === 'dash' && <DashboardTab members={members} totalKas={totalKas} latestKasTitle={latestKasSession?.title} nextAgenda={nextAgenda} formatRupiah={formatRupiah} sliderImages={sliderImages} isAdmin={authRole === 'admin'} showToast={showToast} onNavigateTab={setActiveTab} />}
+             {activeTab === 'dash' && (
+               <DashboardTab 
+                 members={members} 
+                 totalKas={totalKas} 
+                 latestKasTitle={latestKasSession?.title} 
+                 nextAgenda={nextAgenda} 
+                 formatRupiah={formatRupiah} 
+                 sliderImages={sliderImages} 
+                 isAdmin={authRole === 'admin'} 
+                 showToast={showToast} 
+                 onNavigateTab={setActiveTab} 
+                 onUpdateSliderImages={handleUpdateSliderImages}
+                 ringingAgenda={ringingAgenda}
+                 onTriggerAlarm={(ag) => setRingingAgenda(ag)}
+                 onStopAlarm={handleStopGlobalAlarm}
+               />
+             )}
              {activeTab === 'pohon' && <PohonSilsilahTab members={members} showToast={showToast} onNavigateTab={setActiveTab} focusTarget={treeFocusTarget} onClearFocus={() => setTreeFocusTarget(null)} />}
-             {activeTab === 'anggota' && <AnggotaTab members={members} isAdmin={authRole === 'admin'} showToast={showToast} onNavigateTab={setActiveTab} onFocusInTree={(target) => { setTreeFocusTarget({ ...target, timestamp: Date.now() }); setActiveTab('pohon'); }} />}
-             {activeTab === 'agenda' && <AgendaTab agendas={agendas} isAdmin={authRole === 'admin'} showToast={showToast} />}
-             {activeTab === 'kas' && <KasTab kasSessions={kasSessions} legacyTransactions={transactions} totalKas={totalKas} formatRupiah={formatRupiah} isAdmin={authRole === 'admin'} showToast={showToast} />}
-             {activeTab === 'iuran' && <IuranTab iuranSessions={iuranSessions} formatRupiah={formatRupiah} isAdmin={authRole === 'admin'} showToast={showToast} />}
+             {activeTab === 'anggota' && (
+               <AnggotaTab 
+                 members={members} 
+                 isAdmin={authRole === 'admin'} 
+                 showToast={showToast} 
+                 onNavigateTab={setActiveTab} 
+                 onFocusInTree={(target) => { setTreeFocusTarget({ ...target, timestamp: Date.now() }); setActiveTab('pohon'); }} 
+                 onUpdateMember={handleUpdateMember}
+                 onDeleteMember={handleDeleteMember}
+                 onReorderMembers={handleReorderMembers}
+               />
+             )}
+             {activeTab === 'agenda' && (
+               <AgendaTab 
+                 agendas={agendas} 
+                 isAdmin={authRole === 'admin'} 
+                 showToast={showToast} 
+                 onUpdateAgenda={handleUpdateAgenda}
+                 onDeleteAgenda={handleDeleteAgenda}
+               />
+             )}
+             {activeTab === 'kas' && (
+               <KasTab 
+                 kasSessions={kasSessions} 
+                 legacyTransactions={transactions} 
+                 totalKas={totalKas} 
+                 formatRupiah={formatRupiah} 
+                 isAdmin={authRole === 'admin'} 
+                 showToast={showToast} 
+                 onUpdateKasSession={handleUpdateKasSession}
+                 onDeleteKasSession={handleDeleteKasSession}
+               />
+             )}
+             {activeTab === 'iuran' && (
+               <IuranTab 
+                 iuranSessions={iuranSessions} 
+                 members={members}
+                 formatRupiah={formatRupiah} 
+                 isAdmin={authRole === 'admin'} 
+                 showToast={showToast} 
+                 onUpdateIuranSession={handleUpdateIuranSession}
+                 onDeleteIuranSession={handleDeleteIuranSession}
+               />
+             )}
           </div>
         </main>
 
@@ -1067,6 +1340,318 @@ function AdminLoginModal({ onLoginSuccess, onClose }: { onLoginSuccess: () => vo
 }
 
 // ==========================================
+// HITUNGAN MUNDUR AGENDA TERDEKAT
+// ==========================================
+function calculateTimeLeft(dateStr: string, timeStr?: string) {
+  const now = new Date();
+  const parts = dateStr.split('-');
+  const year = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10) - 1;
+  const day = parseInt(parts[2], 10);
+
+  let hours = 8;
+  let minutes = 0;
+  if (timeStr && timeStr.includes(':')) {
+    const tParts = timeStr.split(':');
+    hours = parseInt(tParts[0], 10) || 8;
+    minutes = parseInt(tParts[1], 10) || 0;
+  }
+
+  const target = new Date(year, month, day, hours, minutes, 0, 0);
+  const diffMs = target.getTime() - now.getTime();
+
+  // Acara sedang berlangsung jika telah tiba jam mulai hingga 18 jam ke depan
+  const isPastWithinEventWindow = diffMs <= 0 && diffMs > -(18 * 60 * 60 * 1000);
+  const isPassed = diffMs <= -(18 * 60 * 60 * 1000);
+
+  if (isPastWithinEventWindow) {
+    return {
+      days: 0,
+      hours: 0,
+      minutes: 0,
+      seconds: 0,
+      isToday: true,
+      isDueNow: true,
+      isPassed: false,
+      totalSecondsLeft: 0,
+      diffMs,
+      target
+    };
+  }
+
+  if (isPassed) {
+    return {
+      days: 0,
+      hours: 0,
+      minutes: 0,
+      seconds: 0,
+      isToday: false,
+      isDueNow: false,
+      isPassed: true,
+      totalSecondsLeft: 0,
+      diffMs,
+      target
+    };
+  }
+
+  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const hoursLeft = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const minutesLeft = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+  const secondsLeft = Math.floor((diffMs % (1000 * 60)) / 1000);
+
+  return {
+    days,
+    hours: hoursLeft,
+    minutes: minutesLeft,
+    seconds: secondsLeft,
+    isToday: false,
+    isDueNow: false,
+    isPassed: false,
+    totalSecondsLeft: Math.floor(diffMs / 1000),
+    diffMs,
+    target
+  };
+}
+
+function AgendaCountdownCard({ 
+  agenda, 
+  onNavigateTab,
+  onTriggerAlarm,
+  isAlarmActive,
+  onStopAlarm
+}: { 
+  agenda: Agenda; 
+  onNavigateTab?: (tab: 'dash' | 'pohon' | 'anggota' | 'agenda' | 'kas' | 'iuran') => void; 
+  onTriggerAlarm?: (agenda: Agenda) => void;
+  isAlarmActive?: boolean;
+  onStopAlarm?: () => void;
+}) {
+  const [timeLeft, setTimeLeft] = useState(() => calculateTimeLeft(agenda.date, agenda.time));
+  const [isSoundEnabled, setIsSoundEnabled] = useState(() => isAlarmSoundEnabled());
+  const [notifPermission, setNotifPermission] = useState(() => getNotificationPermissionStatus());
+  const [isTestingSound, setIsTestingSound] = useState(false);
+  const [testFeedback, setTestFeedback] = useState<string | null>(null);
+
+  useEffect(() => {
+    const updateCountdown = () => {
+      const current = calculateTimeLeft(agenda.date, agenda.time);
+      setTimeLeft(current);
+      // Jika waktu hitungan mundur telah tiba (00:00:00 atau saat ini jatuh tempo)
+      if (current.isDueNow) {
+        triggerAgendaAlarm(agenda, () => {
+          onTriggerAlarm?.(agenda);
+        });
+      }
+    };
+
+    updateCountdown();
+    const timer = setInterval(updateCountdown, 1000);
+    return () => clearInterval(timer);
+  }, [agenda.date, agenda.time, agenda.id]);
+
+  const handleToggleSound = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const next = !isSoundEnabled;
+    setIsSoundEnabled(next);
+    setAlarmSoundEnabled(next);
+    if (!next) {
+      stopAlarmSound();
+      onStopAlarm?.();
+    }
+  };
+
+  const handleTestSound = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsTestingSound(true);
+    setTestFeedback('Membunyikan...');
+    try {
+      const res = await testAlarmSoundAndNotification();
+      setNotifPermission(getNotificationPermissionStatus());
+      setTestFeedback(res.permitted ? 'Suara & Notif Aktif! 🔔' : 'Suara Berbunyi! 🔊');
+      setTimeout(() => setTestFeedback(null), 3000);
+    } catch {
+      setTestFeedback('Selesai');
+      setTimeout(() => setTestFeedback(null), 2000);
+    } finally {
+      setIsTestingSound(false);
+    }
+  };
+
+  const handleRequestNotif = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const granted = await requestNotificationPermission();
+    setNotifPermission(granted ? 'granted' : 'denied');
+  };
+
+  return (
+    <div 
+      onClick={() => onNavigateTab?.('agenda')}
+      className="bg-gradient-to-br from-emerald-950 via-teal-900 to-indigo-950 rounded-3xl p-4 sm:p-5 text-white shadow-lg border border-emerald-500/30 relative overflow-hidden cursor-pointer hover:shadow-2xl transition-all duration-300 group"
+      title="Klik untuk membuka menu Agenda Keluarga"
+    >
+      <div className="absolute -right-10 -top-10 w-44 h-44 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none group-hover:bg-emerald-500/25 transition-all duration-500"></div>
+      <div className="absolute -left-10 -bottom-10 w-44 h-44 bg-blue-500/15 rounded-full blur-3xl pointer-events-none"></div>
+
+      <div className="relative z-10 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="flex h-2.5 w-2.5 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400"></span>
+            </span>
+            <span className="text-[11px] font-black uppercase tracking-wider text-emerald-300 flex items-center gap-1.5">
+              <Clock size={13} className="text-emerald-400" />
+              Hitungan Mundur Agenda Terdekat
+            </span>
+          </div>
+          <span className="text-[10px] bg-white/10 hover:bg-white/20 border border-white/15 px-2.5 py-1 rounded-full font-bold flex items-center gap-1 transition">
+            Lihat Detail <ChevronRight size={12} />
+          </span>
+        </div>
+
+        {/* BANNER JIKA ALARM SEDANG BERBUNYI SAAT INI */}
+        {isAlarmActive && (
+          <div className="bg-red-600/90 border-2 border-amber-300 text-white p-3 rounded-2xl animate-pulse flex items-center justify-between shadow-xl">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl animate-bounce">🔔</span>
+              <div>
+                <p className="text-xs font-black uppercase tracking-wider text-amber-200">Waktunya Acara Telah Tiba!</p>
+                <p className="text-[11px] font-semibold text-white">Alarm suara sedang berdering otomatis</p>
+              </div>
+            </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                stopAlarmSound();
+                onStopAlarm?.();
+              }}
+              className="bg-white text-red-700 hover:bg-amber-100 font-black text-xs px-3 py-1.5 rounded-xl shadow cursor-pointer transition flex items-center gap-1 flex-shrink-0"
+            >
+              <VolumeX size={14} /> Matikan Alarm
+            </button>
+          </div>
+        )}
+
+        <div>
+          <h3 className="font-black text-base sm:text-lg text-white drop-shadow-xs line-clamp-1 group-hover:text-emerald-200 transition-colors">
+            {agenda.title}
+          </h3>
+          <div className="text-xs text-emerald-100/80 flex items-center gap-3 mt-1 flex-wrap">
+            <span className="flex items-center gap-1 font-medium">
+              <Calendar size={13} className="text-emerald-300" />
+              {new Date(agenda.date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            </span>
+            <span className="flex items-center gap-1 font-semibold text-amber-300 bg-black/30 px-2 py-0.5 rounded-lg border border-amber-400/20">
+              <Clock size={12} className="text-amber-400" />
+              {agenda.time ? `${agenda.time} WIB` : '08:00 WIB'}
+            </span>
+            {agenda.location && (
+              <span className="flex items-center gap-1 truncate font-medium">
+                <MapPin size={13} className="text-emerald-300" />
+                {agenda.location}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {timeLeft.isToday ? (
+          <div className="bg-emerald-500/25 border border-emerald-400/50 rounded-2xl py-3 px-4 text-center">
+            <p className="text-sm sm:text-base font-black text-emerald-200 animate-pulse flex items-center justify-center gap-2">
+              <span>🎉</span>
+              <span>Waktunya Acara Telah Tiba & Sedang Berlangsung!</span>
+            </p>
+          </div>
+        ) : timeLeft.isPassed ? (
+          <div className="bg-white/10 rounded-2xl p-3 text-center border border-white/10">
+            <p className="text-xs font-semibold text-gray-200">Agenda ini telah terlaksana.</p>
+            <p className="text-[11px] text-emerald-300 font-bold mt-1">Klik untuk menjadwalkan agenda reuni / pertemuan berikutnya →</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-4 gap-2 pt-0.5">
+            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-2 sm:p-2.5 text-center border border-white/15 shadow-inner">
+              <div className="text-xl sm:text-2xl font-black text-white leading-none font-mono">
+                {String(timeLeft.days).padStart(2, '0')}
+              </div>
+              <div className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider text-emerald-300 mt-1">
+                Hari
+              </div>
+            </div>
+            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-2 sm:p-2.5 text-center border border-white/15 shadow-inner">
+              <div className="text-xl sm:text-2xl font-black text-white leading-none font-mono">
+                {String(timeLeft.hours).padStart(2, '0')}
+              </div>
+              <div className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider text-emerald-300 mt-1">
+                Jam
+              </div>
+            </div>
+            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-2 sm:p-2.5 text-center border border-white/15 shadow-inner">
+              <div className="text-xl sm:text-2xl font-black text-white leading-none font-mono">
+                {String(timeLeft.minutes).padStart(2, '0')}
+              </div>
+              <div className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider text-emerald-300 mt-1">
+                Menit
+              </div>
+            </div>
+            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-2 sm:p-2.5 text-center border border-white/15 shadow-inner">
+              <div className="text-xl sm:text-2xl font-black text-amber-300 leading-none font-mono">
+                {String(timeLeft.seconds).padStart(2, '0')}
+              </div>
+              <div className="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider text-amber-300 mt-1">
+                Detik
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* KONTROL PENGINGAT SUARA & NOTIFIKASI OTOMATIS */}
+        <div className="pt-2 border-t border-emerald-500/20 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleToggleSound}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl font-bold transition cursor-pointer ${
+                isSoundEnabled 
+                  ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-400/30' 
+                  : 'bg-white/10 hover:bg-white/20 text-gray-300 border border-white/10'
+              }`}
+              title="Klik untuk menyalakan atau mematikan alarm suara otomatis"
+            >
+              {isSoundEnabled ? <Volume2 size={13} className="text-emerald-400" /> : <VolumeX size={13} className="text-gray-400" />}
+              <span>Alarm Suara: {isSoundEnabled ? 'Aktif' : 'Mati'}</span>
+            </button>
+
+            <button
+              onClick={handleTestSound}
+              disabled={isTestingSound}
+              className="flex items-center gap-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/30 text-amber-200 px-2.5 py-1 rounded-xl font-bold transition cursor-pointer"
+              title="Uji coba suara lonceng alarm dan notifikasi sistem sekarang"
+            >
+              <BellRing size={12} className={isTestingSound ? "animate-bounce text-amber-300" : "text-amber-300"} />
+              <span>{testFeedback || 'Tes Suara'}</span>
+            </button>
+          </div>
+
+          {notifPermission !== 'granted' ? (
+            <button
+              onClick={handleRequestNotif}
+              className="flex items-center gap-1 text-[10px] text-amber-300 font-semibold bg-amber-500/10 hover:bg-amber-500/20 px-2 py-0.5 rounded-lg border border-amber-400/20 cursor-pointer transition"
+              title="Aktifkan izin agar alarm dapat berbunyi saat aplikasi ditutup"
+            >
+              <Bell size={11} />
+              <span>Aktifkan Izin Latar Belakang</span>
+            </button>
+          ) : (
+            <span className="text-[10px] text-emerald-300/80 font-medium flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
+              Otomatis berbunyi meski app ditutup
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
 // TAMPILAN DASHBOARD
 // ==========================================
 function DashboardTab({ 
@@ -1078,17 +1663,25 @@ function DashboardTab({
   sliderImages, 
   isAdmin, 
   showToast,
-  onNavigateTab
+  onNavigateTab,
+  onUpdateSliderImages,
+  ringingAgenda,
+  onTriggerAlarm,
+  onStopAlarm
 }: { 
   members: Member[]; 
   totalKas: number; 
   latestKasTitle?: string;
-  nextAgenda?: Agenda; 
+  nextAgenda?: Agenda | null; 
   formatRupiah: (n: number) => string; 
   sliderImages: SliderImage[]; 
   isAdmin: boolean; 
   showToast: (m: string, t?: 'success' | 'error') => void;
   onNavigateTab?: (tab: 'dash' | 'pohon' | 'anggota' | 'agenda' | 'kas' | 'iuran') => void;
+  onUpdateSliderImages?: (images: SliderImage[]) => void;
+  ringingAgenda?: Agenda | null;
+  onTriggerAlarm?: (agenda: Agenda) => void;
+  onStopAlarm?: () => void;
 }) {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
@@ -1189,6 +1782,41 @@ function DashboardTab({
           <Calendar className="absolute -right-2 -bottom-2 opacity-15 w-18 h-18 group-hover:scale-110 group-hover:opacity-25 transition-all duration-300 pointer-events-none" />
         </div>
       </div>
+
+      {/* FITUR HITUNGAN MUNDUR DARI AGENDA TERDEKAT */}
+      {nextAgenda ? (
+        <AgendaCountdownCard 
+          agenda={nextAgenda} 
+          onNavigateTab={onNavigateTab}
+          onTriggerAlarm={onTriggerAlarm}
+          isAlarmActive={ringingAgenda?.id === nextAgenda.id}
+          onStopAlarm={onStopAlarm}
+        />
+      ) : (
+        <div 
+          onClick={() => onNavigateTab?.('agenda')}
+          className="bg-gradient-to-br from-emerald-950 via-teal-900 to-indigo-950 rounded-3xl p-4 sm:p-5 text-white shadow-lg border border-emerald-500/30 relative overflow-hidden cursor-pointer hover:shadow-2xl transition-all duration-300 group"
+          title="Klik untuk membuka menu Agenda Keluarga"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <span className="flex h-2.5 w-2.5 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400"></span>
+              </span>
+              <span className="text-[11px] font-black uppercase tracking-wider text-emerald-300 flex items-center gap-1.5">
+                <Clock size={13} className="text-emerald-400" />
+                Hitungan Mundur Agenda Terdekat
+              </span>
+            </div>
+            <span className="text-[10px] bg-white/10 hover:bg-white/20 border border-white/15 px-2.5 py-1 rounded-full font-bold flex items-center gap-1 transition">
+              Kelola Agenda <ChevronRight size={12} />
+            </span>
+          </div>
+          <p className="text-sm font-bold text-gray-200">Belum ada agenda keluarga terdekat yang dijadwalkan.</p>
+          <p className="text-xs text-emerald-200/70 mt-1">Klik di sini untuk melihat kalender atau menambahkan agenda pertemuan/reuni baru.</p>
+        </div>
+      )}
 
       {/* SLIDER FOTO DASHBOARD DENGAN CLICK TO ENLARGE YANG AKURAT */}
       <div className="rounded-3xl overflow-hidden relative h-56 sm:h-64 shadow-md bg-gray-900 flex items-center justify-center group">
@@ -1306,6 +1934,7 @@ function DashboardTab({
           sliderImages={sliderImages} 
           showToast={showToast} 
           onClose={() => setIsPhotoModalOpen(false)} 
+          onUpdateSliderImages={onUpdateSliderImages}
         />
       )}
 
@@ -1455,11 +2084,13 @@ function FullScreenImage({
 function ModalKelolaFoto({ 
   sliderImages, 
   showToast, 
-  onClose 
+  onClose,
+  onUpdateSliderImages
 }: { 
   sliderImages: SliderImage[]; 
   showToast: (m: string, t?: 'success' | 'error') => void; 
   onClose: () => void; 
+  onUpdateSliderImages?: (images: SliderImage[]) => void;
 }) {
   const [activeSubTab, setActiveSubTab] = useState<'list' | 'add' | 'edit'>('list');
   
@@ -1487,6 +2118,7 @@ function ModalKelolaFoto({
         title: newTitle.trim() || undefined,
         subtitle: newSubtitle.trim() || undefined
       };
+      onUpdateSliderImages?.([...sliderImages, payload]);
       await setDoc(getDocRef('sliderImages', id), cleanFirestoreData(payload));
       setNewImage('');
       setNewTitle('');
@@ -1518,11 +2150,12 @@ function ModalKelolaFoto({
         title: editingPhoto.title?.trim() || undefined,
         subtitle: (editingPhoto.subtitle || editingPhoto.description)?.trim() || undefined
       };
+      onUpdateSliderImages?.(sliderImages.map(img => img.id === payload.id ? { ...img, ...payload } : img));
       await setDoc(getDocRef('sliderImages', editingPhoto.id), cleanFirestoreData(payload), { merge: true });
       showToast('Foto & tulisan berhasil diperbarui di Firebase', 'success');
       setEditingPhoto(null);
       setActiveSubTab('list');
-    } catch (err) {
+    } catch (err) { 
       handleFirestoreError(err, OperationType.WRITE, 'sliderImages');
       showToast('Gagal memperbarui data foto', 'error');
     }
@@ -1531,6 +2164,7 @@ function ModalKelolaFoto({
   const handleDelete = async (id: number) => {
     if (!window.confirm('Yakin ingin menghapus foto slide ini?')) return;
     try {
+      onUpdateSliderImages?.(sliderImages.filter(img => img.id !== id));
       await deleteDoc(getDocRef('sliderImages', id));
       showToast('Foto berhasil dihapus dari Cloud Firebase', 'success');
       if (editingPhoto?.id === id) {
@@ -1807,6 +2441,114 @@ function ModalKelolaFoto({
 }
 
 // ==========================================
+// BACKGROUND ORNAMEN ISLAMI CERAH (POHON SILSILAH)
+// ==========================================
+function IslamicTreeBackground() {
+  return (
+    <div className="absolute inset-0 pointer-events-none overflow-hidden select-none z-0">
+      {/* 1. Warna Dasar Cerah (Parchment Ivory & Marble Nuance) */}
+      <div className="absolute inset-0 bg-gradient-to-b from-[#FDFCF7] via-[#F8F3E9] to-[#EFE7D8]" />
+
+      {/* 2. Pencahayaan Gradasi Lembut Emas & Zamrud (Ambient Light) */}
+      <div 
+        className="absolute inset-0 opacity-60"
+        style={{
+          background: 'radial-gradient(ellipse at 50% 10%, rgba(217, 119, 6, 0.12) 0%, rgba(16, 185, 129, 0.08) 35%, rgba(245, 158, 11, 0.03) 65%, transparent 80%)'
+        }}
+      />
+
+      {/* 3. Motif Pola Geometris Bintang 8 Islami (Girih & Arabesque Tessellation) */}
+      <svg className="absolute inset-0 w-full h-full opacity-[0.25]" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <pattern id="islamic-star-pattern" width="80" height="80" patternUnits="userSpaceOnUse">
+            {/* Bintang 8 Sudut Islami di Pusat (Khatam / Rub el Hizb) */}
+            <path
+              d="M40 10 L46 26 L62 20 L56 36 L70 40 L56 44 L62 60 L46 54 L40 70 L34 54 L18 60 L24 44 L10 40 L24 36 L18 20 L34 26 Z"
+              fill="rgba(217, 119, 6, 0.04)"
+              stroke="#B48232"
+              strokeWidth="0.9"
+            />
+            {/* Oktagon Geometris Dalam */}
+            <polygon
+              points="40,23 48,27 51,36 48,45 40,49 32,45 29,36 32,27"
+              fill="rgba(21, 128, 61, 0.04)"
+              stroke="#15803D"
+              strokeWidth="0.75"
+            />
+            {/* Bagian Bintang Sudut Luar untuk Tiling Mulus */}
+            <path
+              d="M0 0 L6 10 L16 4 L12 16 L20 20 L12 24 L16 36 L6 30 L0 40"
+              fill="none"
+              stroke="#B48232"
+              strokeWidth="0.75"
+            />
+            <path
+              d="M80 0 L74 10 L64 4 L68 16 L60 20 L68 24 L64 36 L74 30 L80 40"
+              fill="none"
+              stroke="#B48232"
+              strokeWidth="0.75"
+            />
+            <path
+              d="M0 80 L6 70 L16 76 L12 64 L20 60 L12 56 L16 44 L6 50 L0 40"
+              fill="none"
+              stroke="#B48232"
+              strokeWidth="0.75"
+            />
+            <path
+              d="M80 80 L74 70 L64 76 L68 64 L60 60 L68 56 L64 44 L74 50 L80 40"
+              fill="none"
+              stroke="#B48232"
+              strokeWidth="0.75"
+            />
+            {/* Garis Kisi Interlace Lembut */}
+            <line x1="0" y1="40" x2="80" y2="40" stroke="#B48232" strokeWidth="0.5" strokeDasharray="3 3" opacity="0.5" />
+            <line x1="40" y1="0" x2="40" y2="80" stroke="#B48232" strokeWidth="0.5" strokeDasharray="3 3" opacity="0.5" />
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#islamic-star-pattern)" />
+      </svg>
+
+      {/* 4. Ornamen Lengkung & Sudut Kaligrafi / Arabesque Klasik */}
+      {/* Sudut Kiri Atas */}
+      <div className="absolute top-1 left-1 w-24 h-24 opacity-30 pointer-events-none">
+        <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M0 0 L90 0 C60 0 40 20 40 50 C40 80 20 90 0 90 L0 0 Z" fill="rgba(217, 119, 6, 0.08)" />
+          <path d="M4 4 L75 4 C50 4 35 18 35 45 C35 70 20 75 4 75 Z" stroke="#B48232" strokeWidth="1.2" fill="none" />
+          <circle cx="18" cy="18" r="4" fill="#15803D" opacity="0.5" />
+        </svg>
+      </div>
+
+      {/* Sudut Kanan Atas */}
+      <div className="absolute top-1 right-1 w-24 h-24 opacity-30 pointer-events-none scale-x-[-1]">
+        <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M0 0 L90 0 C60 0 40 20 40 50 C40 80 20 90 0 90 L0 0 Z" fill="rgba(217, 119, 6, 0.08)" />
+          <path d="M4 4 L75 4 C50 4 35 18 35 45 C35 70 20 75 4 75 Z" stroke="#B48232" strokeWidth="1.2" fill="none" />
+          <circle cx="18" cy="18" r="4" fill="#15803D" opacity="0.5" />
+        </svg>
+      </div>
+
+      {/* Sudut Kiri Bawah */}
+      <div className="absolute bottom-1 left-1 w-24 h-24 opacity-30 pointer-events-none scale-y-[-1]">
+        <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M0 0 L90 0 C60 0 40 20 40 50 C40 80 20 90 0 90 L0 0 Z" fill="rgba(217, 119, 6, 0.08)" />
+          <path d="M4 4 L75 4 C50 4 35 18 35 45 C35 70 20 75 4 75 Z" stroke="#B48232" strokeWidth="1.2" fill="none" />
+          <circle cx="18" cy="18" r="4" fill="#15803D" opacity="0.5" />
+        </svg>
+      </div>
+
+      {/* Sudut Kanan Bawah */}
+      <div className="absolute bottom-1 right-1 w-24 h-24 opacity-30 pointer-events-none scale-[-1]">
+        <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M0 0 L90 0 C60 0 40 20 40 50 C40 80 20 90 0 90 L0 0 Z" fill="rgba(217, 119, 6, 0.08)" />
+          <path d="M4 4 L75 4 C50 4 35 18 35 45 C35 70 20 75 4 75 Z" stroke="#B48232" strokeWidth="1.2" fill="none" />
+          <circle cx="18" cy="18" r="4" fill="#15803D" opacity="0.5" />
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
 // POHON SILSILAH TAB
 // ==========================================
 function PanZoomWrapper({ 
@@ -1881,19 +2623,22 @@ function PanZoomWrapper({
   return (
     <div 
       ref={containerRef} 
-      className="absolute inset-0 bg-[#1A4331] cursor-grab active:cursor-grabbing touch-none overflow-hidden select-none"
+      className="absolute inset-0 bg-[#FAF7EE] cursor-grab active:cursor-grabbing touch-none overflow-hidden select-none"
       onMouseDown={(e) => { isDragging.current = true; dragStart.current = { x: e.clientX - position.x, y: e.clientY - position.y }; }}
       onMouseMove={(e) => { if(isDragging.current) setPosition({ x: e.clientX - dragStart.current.x, y: e.clientY - dragStart.current.y }); }}
       onMouseUp={() => isDragging.current = false} 
       onMouseLeave={() => isDragging.current = false}
     >
+       {/* Background Ornamen Islami Cerah */}
+       <IslamicTreeBackground />
+
        <div 
          ref={contentRef}
          style={{ 
            transform: `translate(${position.x}px, ${position.y}px) scale(${zoom})`, 
            transformOrigin: '0 0' 
          }} 
-         className={`w-max min-w-full flex justify-center origin-top-left pt-20 pb-48 px-16 ${isAnimating ? 'transition-transform duration-500 ease-out' : ''}`}
+         className={`w-max min-w-full flex justify-center origin-top-left pt-20 pb-48 px-16 relative z-10 ${isAnimating ? 'transition-transform duration-500 ease-out' : ''}`}
        >
           {children}
        </div>
@@ -2782,15 +3527,17 @@ function PohonSilsilahTab({
   };
 
   return (
-    <div className="flex flex-col h-[75vh] relative rounded-2xl overflow-hidden shadow-sm border border-gray-200 bg-[#1A4331] -mx-4 -mt-4">
+    <div className="flex flex-col h-[75vh] relative rounded-2xl overflow-hidden shadow-lg border-2 border-amber-300/70 bg-[#FAF7EE] -mx-4 -mt-4">
       
-      {/* HEADER JUDUL BAGAN SILSILAH */}
+      {/* HEADER JUDUL BAGAN SILSILAH DENGAN ORNAMEN ISLAMI */}
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center pointer-events-none w-[94%] max-w-lg">
-        <div className="bg-white/95 backdrop-blur px-4 sm:px-5 py-1.5 rounded-full shadow-lg text-center border border-emerald-100 flex items-center gap-2">
+        <div className="bg-white/95 backdrop-blur-md px-4 sm:px-6 py-1.5 rounded-full shadow-md text-center border-2 border-amber-400/80 flex items-center gap-2">
+          <span className="text-amber-600 text-xs">✨</span>
           <h2 className="text-xs sm:text-sm font-black text-emerald-950 tracking-wide flex items-center justify-center gap-1.5">
             <span>👑</span>
             <span>Bagan Silsilah Mbah KH. Sumadi</span>
           </h2>
+          <span className="text-amber-600 text-xs">✨</span>
         </div>
       </div>
 
@@ -2800,14 +3547,14 @@ function PohonSilsilahTab({
           {!isSearchOpen && !treeSearchQuery ? (
             <button
               onClick={() => setIsSearchOpen(true)}
-              className="w-10 h-10 bg-white/90 hover:bg-white text-emerald-900 rounded-full shadow-lg flex items-center justify-center transition active:scale-95 cursor-pointer border border-emerald-200 backdrop-blur-md"
+              className="w-10 h-10 bg-white/95 hover:bg-amber-50 text-emerald-950 rounded-full shadow-md flex items-center justify-center transition active:scale-95 cursor-pointer border-2 border-amber-400/80 backdrop-blur-md"
               title="Cari nama di pohon silsilah"
             >
-              <Search size={18} />
+              <Search size={18} className="text-emerald-800" />
             </button>
           ) : (
             <div className="relative flex flex-col items-end w-full">
-              <div className="relative w-full shadow-xl rounded-2xl overflow-hidden border-2 border-emerald-400 bg-white">
+              <div className="relative w-full shadow-xl rounded-2xl overflow-hidden border-2 border-emerald-500 bg-white">
                 <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-700 pointer-events-none" />
                 <input
                   type="text"
@@ -2917,11 +3664,39 @@ function PohonSilsilahTab({
       </div>
 
       {/* KONTROL ZOOM & VIEW */}
-      <div className="absolute left-4 top-14 flex flex-col gap-2.5 z-10">
-        <button onClick={() => setZoom(z => Math.min(z + 0.2, 2.5))} className="w-10 h-10 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 rounded-full text-white shadow-lg flex items-center justify-center transition active:scale-95 cursor-pointer" title="Zoom In"><Plus size={18}/></button>
-        <button onClick={() => setZoom(z => Math.max(z - 0.2, 0.3))} className="w-10 h-10 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 rounded-full text-white shadow-lg flex items-center justify-center transition active:scale-95 cursor-pointer" title="Zoom Out"><Minus size={18}/></button>
-        <button onClick={centerRootAncestor} className="w-10 h-10 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/20 rounded-full text-white shadow-lg flex items-center justify-center transition active:scale-95 cursor-pointer" title="Reset View / Pusatkan"><Maximize size={16}/></button>
-        <button onClick={() => setExpandAll(!expandAll)} className={`w-10 h-10 backdrop-blur-md border rounded-full shadow-lg flex items-center justify-center transition active:scale-95 cursor-pointer ${expandAll ? 'bg-emerald-500/80 border-emerald-400 text-white' : 'bg-white/10 border-white/20 text-white hover:bg-white/20'}`} title="Buka/Tutup Cabang"><Network size={16}/></button>
+      <div className="absolute left-3 sm:left-4 top-14 flex flex-col gap-2 z-30">
+        <button 
+          onClick={() => setZoom(z => Math.min(z + 0.2, 2.5))} 
+          className="w-9 h-9 sm:w-10 sm:h-10 bg-white/95 hover:bg-amber-50 text-emerald-950 border border-amber-300/80 rounded-full shadow-md flex items-center justify-center transition active:scale-95 cursor-pointer backdrop-blur-md" 
+          title="Perbesar (Zoom In)"
+        >
+          <Plus size={18}/>
+        </button>
+        <button 
+          onClick={() => setZoom(z => Math.max(z - 0.2, 0.3))} 
+          className="w-9 h-9 sm:w-10 sm:h-10 bg-white/95 hover:bg-amber-50 text-emerald-950 border border-amber-300/80 rounded-full shadow-md flex items-center justify-center transition active:scale-95 cursor-pointer backdrop-blur-md" 
+          title="Perkecil (Zoom Out)"
+        >
+          <Minus size={18}/>
+        </button>
+        <button 
+          onClick={centerRootAncestor} 
+          className="w-9 h-9 sm:w-10 sm:h-10 bg-white/95 hover:bg-amber-50 text-emerald-950 border border-amber-300/80 rounded-full shadow-md flex items-center justify-center transition active:scale-95 cursor-pointer backdrop-blur-md" 
+          title="Pusatkan ke Mbah KH. Sumadi"
+        >
+          <Maximize size={16}/>
+        </button>
+        <button 
+          onClick={() => setExpandAll(!expandAll)} 
+          className={`w-9 h-9 sm:w-10 sm:h-10 border rounded-full shadow-md flex items-center justify-center transition active:scale-95 cursor-pointer backdrop-blur-md ${
+            expandAll 
+              ? 'bg-emerald-700 border-emerald-800 text-white' 
+              : 'bg-white/95 border-amber-300/80 text-emerald-950 hover:bg-amber-50'
+          }`} 
+          title="Buka / Tutup Cabang Silsilah"
+        >
+          <Network size={16}/>
+        </button>
       </div>
 
       <PanZoomWrapper 
@@ -3745,13 +4520,19 @@ function AnggotaTab({
   isAdmin, 
   showToast,
   onNavigateTab,
-  onFocusInTree
+  onFocusInTree,
+  onUpdateMember,
+  onDeleteMember,
+  onReorderMembers
 }: { 
   members: Member[]; 
   isAdmin: boolean; 
   showToast: (m: string, t?: 'success' | 'error') => void;
   onNavigateTab?: (tab: 'dash' | 'pohon' | 'anggota' | 'agenda' | 'kas' | 'iuran') => void;
   onFocusInTree?: (target: { memberId?: number; spouseName?: string; name?: string }) => void;
+  onUpdateMember?: (updated: Member) => void;
+  onDeleteMember?: (id: number) => void;
+  onReorderMembers?: (newMembers: Member[]) => void;
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedGeneration, setSelectedGeneration] = useState<'all' | number>('all');
@@ -3901,6 +4682,7 @@ function AnggotaTab({
 
   const executeDelete = async (id: number) => {
     try {
+      onDeleteMember?.(id);
       await deleteDoc(getDocRef('members', id));
       members.forEach(async (m) => {
           if (m.parentId === id) await setDoc(getDocRef('members', m.id), { ...m, parentId: null });
@@ -4295,7 +5077,15 @@ function AnggotaTab({
         )}
       </div>
 
-      {isModalOpen && <ModalFormAnggota member={editingItem} members={members} showToast={showToast} onClose={() => setIsModalOpen(false)} />}
+      {isModalOpen && (
+        <ModalFormAnggota 
+          member={editingItem} 
+          members={members} 
+          showToast={showToast} 
+          onClose={() => setIsModalOpen(false)} 
+          onUpdateMember={onUpdateMember} 
+        />
+      )}
       {selectedTarget && (
         <ProfilePopupCard 
           initialTarget={selectedTarget} 
@@ -4320,12 +5110,14 @@ function ModalFormAnggota({
   member, 
   members, 
   showToast, 
-  onClose 
+  onClose,
+  onUpdateMember
 }: { 
   member: Member | null; 
   members: Member[]; 
   showToast: (m: string, t?: 'success' | 'error') => void; 
   onClose: () => void;
+  onUpdateMember?: (updated: Member) => void;
 }) {
   // Mbah Sumadi (1), Istri 1 (2), dan Istri 2 (3) adalah Pemuncak Silsilah
   const isPemuncak = member?.id === 1 || member?.id === 2 || member?.id === 3;
@@ -4709,6 +5501,7 @@ function ModalFormAnggota({
         order: member?.order !== undefined ? member.order : (members.length > 0 ? Math.max(...members.map(m => m.order ?? 0)) + 1 : 0)
       };
 
+      onUpdateMember?.(payload as Member);
       await setDoc(getDocRef('members', id), cleanFirestoreData(payload));
       showToast('Data Anggota & Silsilah berhasil disimpan di Firebase', 'success');
       onClose();
@@ -5184,13 +5977,30 @@ function ModalFormAnggota({
 // ==========================================
 // TAMPILAN AGENDA, KAS, IURAN
 // ==========================================
-function AgendaTab({ agendas, isAdmin, showToast }: { agendas: Agenda[]; isAdmin: boolean; showToast: (m: string, t?: 'success' | 'error') => void }) {
+function AgendaTab({ 
+  agendas, 
+  isAdmin, 
+  showToast,
+  onUpdateAgenda,
+  onDeleteAgenda
+}: { 
+  agendas: Agenda[]; 
+  isAdmin: boolean; 
+  showToast: (m: string, t?: 'success' | 'error') => void;
+  onUpdateAgenda?: (updated: Agenda) => void;
+  onDeleteAgenda?: (id: number) => void;
+}) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Agenda | null>(null);
   const [itemToDelete, setItemToDelete] = useState<number | null>(null);
+  const [isSoundOn, setIsSoundOn] = useState(() => isAlarmSoundEnabled());
+  const [notifStatus, setNotifStatus] = useState(() => getNotificationPermissionStatus());
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
 
   const executeDelete = async (id: number) => {
     try {
+      onDeleteAgenda?.(id);
       await deleteDoc(getDocRef('agendas', id));
       setItemToDelete(null);
       showToast('Agenda berhasil dihapus dari Firebase', 'success');
@@ -5200,48 +6010,175 @@ function AgendaTab({ agendas, isAdmin, showToast }: { agendas: Agenda[]; isAdmin
     }
   };
 
+  const handleToggleSound = () => {
+    const next = !isSoundOn;
+    setIsSoundOn(next);
+    setAlarmSoundEnabled(next);
+    showToast(next ? 'Alarm suara agenda diaktifkan 🔔' : 'Alarm suara dinonaktifkan 🔕', 'success');
+  };
+
+  const handleTestAudio = async () => {
+    setIsTesting(true);
+    setTestResult('Membunyikan...');
+    try {
+      const res = await testAlarmSoundAndNotification();
+      setNotifStatus(getNotificationPermissionStatus());
+      setTestResult(res.permitted ? 'Berhasil! 🔔' : 'Suara Berbunyi! 🔊');
+      showToast('Suara notifikasi agenda berhasil dibunyikan', 'success');
+      setTimeout(() => setTestResult(null), 3000);
+    } catch {
+      setTestResult('Selesai');
+      setTimeout(() => setTestResult(null), 2000);
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
+  const handleRequestNotif = async () => {
+    const granted = await requestNotificationPermission();
+    setNotifStatus(granted ? 'granted' : 'denied');
+    showToast(granted ? 'Izin notifikasi latar belakang berhasil diaktifkan!' : 'Izin notifikasi belum diizinkan oleh browser', granted ? 'success' : 'error');
+  };
+
   return (
     <div className="space-y-4 pb-6">
-      <div className="flex justify-between items-center mb-2"><h2 className="text-xl font-bold text-gray-800">Agenda Keluarga</h2></div>
-      {isAdmin && <button onClick={() => { setEditingItem(null); setIsModalOpen(true); }} className="w-full bg-green-600 text-white font-bold py-3.5 rounded-xl shadow-md transition flex justify-center cursor-pointer"><Plus size={20} className="mr-2" /> Tambah Agenda</button>}
+      <div className="flex justify-between items-center mb-1">
+        <h2 className="text-xl font-bold text-gray-800">Agenda Keluarga</h2>
+      </div>
+
+      {/* CARD PENGINGAT SUARA & NOTIFIKASI LATAR BELAKANG */}
+      <div className="bg-gradient-to-r from-emerald-800 via-teal-800 to-green-900 text-white p-4 rounded-2xl shadow-sm border border-emerald-600/30">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center text-emerald-300">
+              <BellRing size={20} />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-white">Alarm & Notifikasi Otomatis</h4>
+              <p className="text-[11px] text-emerald-200/90 leading-tight mt-0.5">
+                Suara lonceng dan notifikasi sistem berbunyi otomatis saat waktu tiba (meskipun aplikasi ditutup).
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3 pt-3 border-t border-emerald-700/50 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleToggleSound}
+              className={`px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                isSoundOn 
+                  ? 'bg-emerald-500/30 text-emerald-200 border border-emerald-400/40' 
+                  : 'bg-white/10 text-gray-300 border border-white/10'
+              }`}
+            >
+              {isSoundOn ? <Volume2 size={14} className="text-emerald-300" /> : <VolumeX size={14} className="text-gray-400" />}
+              <span>Alarm Suara: {isSoundOn ? 'Aktif' : 'Mati'}</span>
+            </button>
+
+            <button
+              onClick={handleTestAudio}
+              disabled={isTesting}
+              className="px-3 py-1.5 bg-amber-500/25 hover:bg-amber-500/35 border border-amber-400/40 text-amber-200 rounded-xl font-bold transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <Bell size={13} className={isTesting ? "animate-bounce" : ""} />
+              <span>{testResult || 'Tes Bunyi Alarm'}</span>
+            </button>
+          </div>
+
+          {notifStatus !== 'granted' ? (
+            <button
+              onClick={handleRequestNotif}
+              className="px-2.5 py-1 text-[11px] font-semibold bg-amber-400 text-emerald-950 rounded-lg shadow-sm hover:bg-amber-300 transition cursor-pointer"
+            >
+              Aktifkan Izin Latar Belakang
+            </button>
+          ) : (
+            <span className="text-[11px] text-emerald-300 flex items-center gap-1 font-medium">
+              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+              Izin Notifikasi Aktif
+            </span>
+          )}
+        </div>
+      </div>
+
+      {isAdmin && (
+        <button 
+          onClick={() => { setEditingItem(null); setIsModalOpen(true); }} 
+          className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3.5 rounded-xl shadow-md transition flex items-center justify-center cursor-pointer"
+        >
+          <Plus size={20} className="mr-2" /> Tambah Agenda Baru
+        </button>
+      )}
+
       <div className="space-y-3">
-        {[...agendas].sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime()).map(a => (
+        {[...agendas].sort((a,b) => getAgendaTargetTimestamp(a) - getAgendaTargetTimestamp(b)).map(a => (
           <div key={a.id} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex gap-4 items-start">
-            <div className="bg-green-50 border border-green-100 p-2.5 rounded-xl text-center min-w-[64px] h-fit">
+            <div className="bg-green-50 border border-green-100 p-2.5 rounded-xl text-center min-w-[64px] h-fit flex-shrink-0">
               <p className="text-[10px] font-black text-green-700 uppercase">{new Date(a.date).toLocaleDateString('id-ID', { month: 'short' })}</p>
               <p className="text-2xl font-black text-green-800 my-0.5">{new Date(a.date).getDate()}</p>
+              <span className="text-[9px] font-bold text-gray-500 block truncate">{new Date(a.date).getFullYear()}</span>
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex justify-between items-start">
                 <h3 className="font-bold text-gray-800 text-base mb-1 truncate pr-2">{a.title}</h3>
                 {isAdmin && (
                   <div className="flex gap-1 flex-shrink-0">
-                    <button onClick={() => { setEditingItem(a); setIsModalOpen(true); }} className="text-blue-500 bg-blue-50 p-1.5 rounded-lg cursor-pointer"><Edit2 size={14}/></button>
-                    <button onClick={() => setItemToDelete(a.id)} className="text-red-500 bg-red-50 p-1.5 rounded-lg cursor-pointer"><Trash2 size={14}/></button>
+                    <button onClick={() => { setEditingItem(a); setIsModalOpen(true); }} className="text-blue-500 bg-blue-50 p-1.5 rounded-lg cursor-pointer hover:bg-blue-100 transition"><Edit2 size={14}/></button>
+                    <button onClick={() => setItemToDelete(a.id)} className="text-red-500 bg-red-50 p-1.5 rounded-lg cursor-pointer hover:bg-red-100 transition"><Trash2 size={14}/></button>
                   </div>
                 )}
               </div>
-              <p className="text-[11px] text-gray-500 mb-2">📍 {a.location}</p>
+              <div className="flex items-center gap-2 mb-2 flex-wrap text-[11px] text-gray-500">
+                <span className="flex items-center gap-1 font-medium bg-gray-100 px-2 py-0.5 rounded-md">
+                  <Clock size={11} className="text-green-700" />
+                  {a.time ? `${a.time} WIB` : '08:00 WIB'}
+                </span>
+                <span className="truncate">📍 {a.location}</span>
+              </div>
               <p className="text-xs text-gray-600 bg-gray-50 p-2.5 rounded-xl border border-gray-100 break-words">{a.desc}</p>
             </div>
           </div>
         ))}
         {agendas.length === 0 && <p className="text-center text-gray-400 py-10 text-sm font-medium">Belum ada agenda keluarga tercatat.</p>}
       </div>
-      {isModalOpen && <ModalFormAgenda agenda={editingItem} showToast={showToast} onClose={() => setIsModalOpen(false)} />}
+      {isModalOpen && (
+        <ModalFormAgenda 
+          agenda={editingItem} 
+          showToast={showToast} 
+          onClose={() => setIsModalOpen(false)} 
+          onUpdateAgenda={onUpdateAgenda}
+        />
+      )}
       {itemToDelete !== null && <ConfirmModal title="Hapus Agenda" message="Apakah Anda yakin ingin menghapus catatan agenda keluarga ini?" onCancel={() => setItemToDelete(null)} onConfirm={() => executeDelete(itemToDelete)} />}
     </div>
   );
 }
 
-function ModalFormAgenda({ agenda, showToast, onClose }: { agenda: Agenda | null; showToast: (m: string, t?: 'success' | 'error') => void; onClose: () => void }) {
-  const [formData, setFormData] = useState<Partial<Agenda>>(agenda || { date: '', title: '', location: '', desc: '' });
+function ModalFormAgenda({ 
+  agenda, 
+  showToast, 
+  onClose,
+  onUpdateAgenda
+}: { 
+  agenda: Agenda | null; 
+  showToast: (m: string, t?: 'success' | 'error') => void; 
+  onClose: () => void; 
+  onUpdateAgenda?: (updated: Agenda) => void;
+}) {
+  const [formData, setFormData] = useState<Partial<Agenda>>(agenda || { date: '', time: '08:00', title: '', location: '', desc: '' });
   
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       const id = agenda ? agenda.id : Date.now();
-      await setDoc(getDocRef('agendas', id), cleanFirestoreData({ ...formData, id }));
+      const payload = { 
+        ...formData, 
+        id,
+        time: formData.time || '08:00'
+      } as Agenda;
+      onUpdateAgenda?.(payload);
+      await setDoc(getDocRef('agendas', id), cleanFirestoreData(payload));
       showToast('Agenda berhasil disimpan di Firebase', 'success');
       onClose();
     } catch (err) { 
@@ -5253,13 +6190,46 @@ function ModalFormAgenda({ agenda, showToast, onClose }: { agenda: Agenda | null
   return (
     <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl">
-        <div className="bg-green-700 p-4 text-white font-bold text-sm">{agenda ? 'Edit Agenda' : 'Tambah Agenda'}</div>
-        <form onSubmit={handleSave} className="p-5 space-y-4">
-          <input placeholder="Judul Acara" required className="w-full border-2 p-3 rounded-xl text-sm outline-none focus:border-green-500" value={formData.title || ''} onChange={e=>setFormData({...formData, title: e.target.value})} />
-          <input type="date" required className="w-full border-2 p-3 rounded-xl text-sm outline-none focus:border-green-500" value={formData.date || ''} onChange={e=>setFormData({...formData, date: e.target.value})} />
-          <input placeholder="Lokasi" required className="w-full border-2 p-3 rounded-xl text-sm outline-none focus:border-green-500" value={formData.location || ''} onChange={e=>setFormData({...formData, location: e.target.value})} />
-          <textarea placeholder="Keterangan" className="w-full border-2 p-3 rounded-xl text-sm resize-none outline-none focus:border-green-500" rows={3} value={formData.desc || ''} onChange={e=>setFormData({...formData, desc: e.target.value})} />
-          <div className="flex gap-3"><button type="button" onClick={onClose} className="flex-1 py-3 border-2 rounded-xl text-sm font-bold text-gray-500 cursor-pointer">Batal</button><button type="submit" className="flex-1 py-3 bg-green-600 text-white rounded-xl text-sm font-bold shadow-md cursor-pointer">Simpan</button></div>
+        <div className="bg-green-700 p-4 text-white font-bold text-sm flex items-center justify-between">
+          <span>{agenda ? 'Edit Agenda Keluarga' : 'Tambah Agenda Keluarga Baru'}</span>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-white/20 transition cursor-pointer"><X size={16} /></button>
+        </div>
+        <form onSubmit={handleSave} className="p-5 space-y-3.5">
+          <div>
+            <label className="text-[11px] font-bold text-gray-700 block mb-1">Judul Acara Agenda</label>
+            <input placeholder="Contoh: Reuni Akbar Bani KH. Sumadi" required className="w-full border-2 p-2.5 rounded-xl text-sm outline-none focus:border-green-500 font-medium" value={formData.title || ''} onChange={e=>setFormData({...formData, title: e.target.value})} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] font-bold text-gray-700 block mb-1">Tanggal Acara</label>
+              <input type="date" required className="w-full border-2 p-2.5 rounded-xl text-sm outline-none focus:border-green-500 font-medium" value={formData.date || ''} onChange={e=>setFormData({...formData, date: e.target.value})} />
+            </div>
+            <div>
+              <label className="text-[11px] font-bold text-gray-700 block mb-1">Jam Acara (WIB)</label>
+              <input type="time" className="w-full border-2 p-2.5 rounded-xl text-sm outline-none focus:border-green-500 font-medium" value={formData.time || '08:00'} onChange={e=>setFormData({...formData, time: e.target.value})} />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[11px] font-bold text-gray-700 block mb-1">Lokasi Tempat Acara</label>
+            <input placeholder="Contoh: Rumah Kediaman Tuban" required className="w-full border-2 p-2.5 rounded-xl text-sm outline-none focus:border-green-500 font-medium" value={formData.location || ''} onChange={e=>setFormData({...formData, location: e.target.value})} />
+          </div>
+
+          <div>
+            <label className="text-[11px] font-bold text-gray-700 block mb-1">Keterangan / Deskripsi Acara</label>
+            <textarea placeholder="Keterangan susunan acara, dresscode, konsumsi, dll." className="w-full border-2 p-2.5 rounded-xl text-sm resize-none outline-none focus:border-green-500" rows={3} value={formData.desc || ''} onChange={e=>setFormData({...formData, desc: e.target.value})} />
+          </div>
+
+          <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-200 text-[11px] text-emerald-800 flex items-start gap-2">
+            <Bell size={14} className="text-emerald-600 mt-0.5 shrink-0" />
+            <span>Notifikasi alarm suara otomatis dijadwalkan dan berbunyi saat countdown acara tiba di jam yang dipilih.</span>
+          </div>
+
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={onClose} className="flex-1 py-3 border-2 rounded-xl text-sm font-bold text-gray-500 hover:bg-gray-50 cursor-pointer">Batal</button>
+            <button type="submit" className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-bold shadow-md cursor-pointer transition">Simpan Agenda</button>
+          </div>
         </form>
       </div>
     </div>
@@ -5272,14 +6242,18 @@ function KasTab({
   totalKas, 
   formatRupiah, 
   isAdmin, 
-  showToast 
+  showToast,
+  onUpdateKasSession,
+  onDeleteKasSession
 }: { 
   kasSessions: KasSession[]; 
   legacyTransactions: Transaction[];
   totalKas: number; 
   formatRupiah: (n: number) => string; 
   isAdmin: boolean; 
-  showToast: (m: string, t?: 'success' | 'error') => void 
+  showToast: (m: string, t?: 'success' | 'error') => void;
+  onUpdateKasSession?: (updated: KasSession) => void;
+  onDeleteKasSession?: (id: number) => void;
 }) {
   const sortedSessions = useMemo(() => {
     return [...kasSessions].sort(compareKasSessionsDescending);
@@ -5347,6 +6321,7 @@ function KasTab({
 
   const executeDeleteSession = async (id: number) => {
     try {
+      onDeleteKasSession?.(id);
       await deleteDoc(getDocRef('kasSessions', id));
       setActiveSid(null);
       setSessionToDelete(null);
@@ -5361,7 +6336,9 @@ function KasTab({
     if (!activeSession) return;
     try {
       const newTransactions = activeSession.transactions.filter(x => x.id !== transId);
-      await setDoc(getDocRef('kasSessions', activeSession.id), cleanFirestoreData({ ...activeSession, transactions: newTransactions }));
+      const updated = { ...activeSession, transactions: newTransactions };
+      onUpdateKasSession?.(updated);
+      await setDoc(getDocRef('kasSessions', activeSession.id), cleanFirestoreData(updated));
       setItemToDelete(null);
       showToast('Transaksi berhasil dihapus dari lembar kas', 'success');
     } catch (err) {
@@ -5648,6 +6625,7 @@ function KasTab({
           activeSession={activeSession}
           showToast={showToast} 
           onClose={() => setIsModalOpen(false)} 
+          onUpdateKasSession={onUpdateKasSession}
         />
       )}
 
@@ -5660,6 +6638,7 @@ function KasTab({
           onSave={async (t) => { 
             try {
               const n: KasSession = { id: Date.now(), title: t, transactions: [] }; 
+              onUpdateKasSession?.(n);
               await setDoc(getDocRef('kasSessions', n.id), cleanFirestoreData(n)); 
               setActiveSid(n.id); 
               setIsNewSessOpen(false); 
@@ -5680,7 +6659,9 @@ function KasTab({
           onClose={() => setIsEditSessOpen(false)} 
           onSave={async (t) => { 
             try {
-              await setDoc(getDocRef('kasSessions', activeSession.id), cleanFirestoreData({ ...activeSession, title: t })); 
+              const updated = { ...activeSession, title: t };
+              onUpdateKasSession?.(updated);
+              await setDoc(getDocRef('kasSessions', activeSession.id), cleanFirestoreData(updated)); 
               setIsEditSessOpen(false); 
               showToast('Nama lembar transaksi berhasil diubah di Firebase', 'success'); 
             } catch (err) { 
@@ -5718,12 +6699,14 @@ function ModalFormKas({
   item, 
   activeSession,
   showToast, 
-  onClose 
+  onClose,
+  onUpdateKasSession
 }: { 
   item: Transaction | null; 
   activeSession: KasSession;
   showToast: (m: string, t?: 'success' | 'error') => void; 
   onClose: () => void;
+  onUpdateKasSession?: (updated: KasSession) => void;
 }) {
   const [formData, setFormData] = useState<Partial<Transaction>>(
     item || { 
@@ -5756,7 +6739,9 @@ function ModalFormKas({
         newTransactions = [...(activeSession.transactions || []), payload];
       }
 
-      await setDoc(getDocRef('kasSessions', activeSession.id), cleanFirestoreData({ ...activeSession, transactions: newTransactions }));
+      const updated = { ...activeSession, transactions: newTransactions };
+      onUpdateKasSession?.(updated);
+      await setDoc(getDocRef('kasSessions', activeSession.id), cleanFirestoreData(updated));
       showToast('Transaksi kas berhasil disimpan ke Firebase', 'success');
       onClose();
     } catch (err) { 
@@ -5842,7 +6827,23 @@ function ModalFormKas({
   );
 }
 
-function IuranTab({ iuranSessions, formatRupiah, isAdmin, showToast }: { iuranSessions: IuranSession[]; formatRupiah: (n: number) => string; isAdmin: boolean; showToast: (m: string, t?: 'success' | 'error') => void }) {
+function IuranTab({ 
+  iuranSessions, 
+  members = [],
+  formatRupiah, 
+  isAdmin, 
+  showToast,
+  onUpdateIuranSession,
+  onDeleteIuranSession
+}: { 
+  iuranSessions: IuranSession[]; 
+  members?: Member[];
+  formatRupiah: (n: number) => string; 
+  isAdmin: boolean; 
+  showToast: (m: string, t?: 'success' | 'error') => void;
+  onUpdateIuranSession?: (updated: IuranSession) => void;
+  onDeleteIuranSession?: (id: number) => void;
+}) {
   const sortedSessions = useMemo(() => {
     return [...iuranSessions].sort(compareIuranSessionsDescending);
   }, [iuranSessions]);
@@ -5872,6 +6873,7 @@ function IuranTab({ iuranSessions, formatRupiah, isAdmin, showToast }: { iuranSe
 
   const executeDeleteSession = async (id: number) => {
      try {
+       onDeleteIuranSession?.(id);
        await deleteDoc(getDocRef('iuranSessions', id));
        setActiveSid(null);
        setSessionToDelete(null);
@@ -5886,7 +6888,9 @@ function IuranTab({ iuranSessions, formatRupiah, isAdmin, showToast }: { iuranSe
      if (!activeSession) return;
      try {
        const newData = activeSession.data.filter(x => x.id !== rowId);
-       await setDoc(getDocRef('iuranSessions', activeSession.id), { ...activeSession, data: newData });
+       const updated = { ...activeSession, data: newData };
+       onUpdateIuranSession?.(updated);
+       await setDoc(getDocRef('iuranSessions', activeSession.id), updated);
        setItemToDelete(null);
        showToast('Baris data berhasil dihapus di Firebase', 'success');
      } catch (err) { 
@@ -5970,33 +6974,58 @@ function IuranTab({ iuranSessions, formatRupiah, isAdmin, showToast }: { iuranSe
          </div>
       )}
       
-      {isModalOpen && activeSession && <ModalFormIuranItem item={editingItem} activeSession={activeSession} showToast={showToast} onClose={() => setIsModalOpen(false)} />}
+      {isModalOpen && activeSession && (
+        <ModalFormIuranItem 
+          item={editingItem} 
+          activeSession={activeSession} 
+          members={members}
+          formatRupiah={formatRupiah}
+          showToast={showToast} 
+          onClose={() => setIsModalOpen(false)} 
+          onUpdateIuranSession={onUpdateIuranSession}
+        />
+      )}
       
-      {isNewSessOpen && <ModalSess title="" label="Buat Lembar Data Baru" onClose={() => setIsNewSessOpen(false)} onSave={async (t) => { 
-        try {
-          const n = { id: Date.now(), title: t, data: [] }; 
-          await setDoc(getDocRef('iuranSessions', n.id), n); 
-          setActiveSid(n.id); 
-          setIsNewSessOpen(false); 
-          showToast('Lembar baru berhasil disimpan di Firebase', 'success'); 
-        } catch (err) { 
-          handleFirestoreError(err, OperationType.WRITE, 'iuranSessions');
-          showToast('Gagal membuat lembar', 'error'); 
-        }
-      }} />}
+      {isNewSessOpen && (
+        <ModalSess 
+          title="" 
+          label="Buat Lembar Data Baru" 
+          onClose={() => setIsNewSessOpen(false)} 
+          onSave={async (t) => { 
+            try {
+              const n = { id: Date.now(), title: t, data: [] }; 
+              onUpdateIuranSession?.(n);
+              await setDoc(getDocRef('iuranSessions', n.id), n); 
+              setActiveSid(n.id); 
+              setIsNewSessOpen(false); 
+              showToast('Lembar baru berhasil disimpan di Firebase', 'success'); 
+            } catch (err) { 
+              handleFirestoreError(err, OperationType.WRITE, 'iuranSessions');
+              showToast('Gagal membuat lembar', 'error'); 
+            }
+          }} 
+        />
+      )}
       
       {isEditSessOpen && (
-        <ModalSess title={activeSession?.title || ''} label="Edit Nama Lembar" onClose={() => setIsEditSessOpen(false)} onSave={async (t) => { 
-          if (!activeSession) return;
-          try {
-            await setDoc(getDocRef('iuranSessions', activeSession.id), {...activeSession, title: t}); 
-            setIsEditSessOpen(false); 
-            showToast('Nama lembar berhasil diubah di Firebase', 'success'); 
-          } catch (err) { 
-            handleFirestoreError(err, OperationType.WRITE, 'iuranSessions');
-            showToast('Gagal mengubah nama', 'error'); 
-          }
-        }} />
+        <ModalSess 
+          title={activeSession?.title || ''} 
+          label="Edit Nama Lembar" 
+          onClose={() => setIsEditSessOpen(false)} 
+          onSave={async (t) => { 
+            if (!activeSession) return;
+            try {
+              const updated = { ...activeSession, title: t };
+              onUpdateIuranSession?.(updated);
+              await setDoc(getDocRef('iuranSessions', activeSession.id), updated); 
+              setIsEditSessOpen(false); 
+              showToast('Nama lembar berhasil diubah di Firebase', 'success'); 
+            } catch (err) { 
+              handleFirestoreError(err, OperationType.WRITE, 'iuranSessions');
+              showToast('Gagal mengubah nama', 'error'); 
+            }
+          }} 
+        />
       )}
       
       {sessionToDelete !== null && <ConfirmModal title="Hapus Lembar Iuran" message="Yakin menghapus seluruh lembar data ini dari Firebase? Semua isinya akan hilang permanen." onCancel={() => setSessionToDelete(null)} onConfirm={() => executeDeleteSession(sessionToDelete)} />}
@@ -6005,18 +7034,150 @@ function IuranTab({ iuranSessions, formatRupiah, isAdmin, showToast }: { iuranSe
   );
 }
 
-function ModalFormIuranItem({ item, activeSession, showToast, onClose }: { item: IuranRow | null; activeSession: IuranSession; showToast: (m: string, t?: 'success' | 'error') => void; onClose: () => void }) {
-  const [formData, setFormData] = useState<{ name: string; amount: string | number }>(item ? { name: item.name, amount: item.amount } : { name: '', amount: '' });
+function ModalFormIuranItem({ 
+  item, 
+  activeSession, 
+  members = [],
+  formatRupiah,
+  showToast, 
+  onClose,
+  onUpdateIuranSession
+}: { 
+  item: IuranRow | null; 
+  activeSession: IuranSession; 
+  members?: Member[];
+  formatRupiah?: (n: number) => string;
+  showToast: (m: string, t?: 'success' | 'error') => void; 
+  onClose: () => void;
+  onUpdateIuranSession?: (updated: IuranSession) => void;
+}) {
+  const [formData, setFormData] = useState<{ name: string; amount: string | number }>(
+    item ? { name: item.name, amount: item.amount } : { name: '', amount: '' }
+  );
+
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [searchFilter, setSearchFilter] = useState('');
+  const [selectedGenFilter, setSelectedGenFilter] = useState<'all' | number>('all');
+  const amountInputRef = useRef<HTMLInputElement>(null);
+
+  // Kompilasi seluruh data anggota dan pasangan keluarga untuk pilihan cepat
+  const candidates = useMemo(() => {
+    const list: Array<{
+      id: string;
+      name: string;
+      gen: number;
+      genLabel: ReturnType<typeof getGenerationLabel>;
+      subtitle: string;
+      isAlive: boolean;
+      gender: 'L' | 'P';
+      domicile?: string;
+    }> = [];
+
+    const memberMap = new Map<number, Member>();
+    members.forEach(m => memberMap.set(m.id, m));
+
+    members.forEach(m => {
+      const gen = getMemberGeneration(m, members);
+      const genLabel = getGenerationLabel(gen);
+      
+      let parentDesc = '';
+      if (m.parentId) {
+        const parent = memberMap.get(m.parentId);
+        if (parent) parentDesc = `Anak dari ${parent.name}`;
+      } else if (m.branch === 'istri1') {
+        parentDesc = 'Cabang Mbah Munasikah';
+      } else if (m.branch === 'istri2') {
+        parentDesc = 'Cabang Mbah Masripah';
+      } else if (gen === 1) {
+        parentDesc = 'Pemuncak Silsilah';
+      }
+
+      list.push({
+        id: `mem-${m.id}`,
+        name: m.name,
+        gen,
+        genLabel,
+        subtitle: parentDesc || genLabel.subtitle,
+        isAlive: m.isAlive ?? true,
+        gender: m.gender || 'L',
+        domicile: m.domicile
+      });
+
+      // Tambahkan data pasangan terdaftar (jika ada)
+      const spouses = getMemberSpouses(m, members);
+      spouses.forEach((sp, sIdx) => {
+        list.push({
+          id: `sp-${m.id}-${sIdx}`,
+          name: sp.name,
+          gen,
+          genLabel,
+          subtitle: `Pasangan dari ${m.name}`,
+          isAlive: sp.isAlive ?? true,
+          gender: m.gender === 'L' ? 'P' : 'L',
+          domicile: sp.domicile || m.domicile
+        });
+      });
+    });
+
+    // Urutkan berdasarkan generasi 1, 2, 3, dst, lalu nama
+    return list.sort((a, b) => {
+      if (a.gen !== b.gen) return a.gen - b.gen;
+      return a.name.localeCompare(b.name, 'id');
+    });
+  }, [members]);
+
+  const availableGens = useMemo(() => {
+    const s = new Set<number>();
+    candidates.forEach(c => s.add(c.gen));
+    return Array.from(s).sort((a, b) => a - b);
+  }, [candidates]);
+
+  const filteredCandidates = useMemo(() => {
+    return candidates.filter(c => {
+      if (selectedGenFilter !== 'all' && c.gen !== selectedGenFilter) return false;
+      if (!searchFilter.trim()) return true;
+      const q = searchFilter.toLowerCase();
+      return (
+        c.name.toLowerCase().includes(q) ||
+        c.subtitle.toLowerCase().includes(q) ||
+        (c.domicile && c.domicile.toLowerCase().includes(q))
+      );
+    });
+  }, [candidates, selectedGenFilter, searchFilter]);
+
+  const handleSelectMember = (name: string) => {
+    setFormData(prev => ({ ...prev, name }));
+    setIsPickerOpen(false);
+    // Otomatis arahkan fokus ke input nominal
+    setTimeout(() => {
+      amountInputRef.current?.focus();
+    }, 100);
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.name.trim()) {
+      showToast('Nama anggota tidak boleh kosong', 'error');
+      return;
+    }
+    if (!formData.amount || Number(formData.amount) <= 0) {
+      showToast('Nominal iuran harus diisi', 'error');
+      return;
+    }
+
     try {
-      const payload: IuranRow = { id: item ? item.id : Date.now(), name: formData.name, amount: Number(formData.amount) };
+      const payload: IuranRow = { 
+        id: item ? item.id : Date.now(), 
+        name: formData.name.trim(), 
+        amount: Number(formData.amount) 
+      };
       let newData: IuranRow[];
       if (item) newData = activeSession.data.map(x => x.id === item.id ? payload : x);
       else newData = [...activeSession.data, payload];
       
-      await setDoc(getDocRef('iuranSessions', activeSession.id), { ...activeSession, data: newData });
+      const updated = { ...activeSession, data: newData };
+      onUpdateIuranSession?.(updated);
+      await setDoc(getDocRef('iuranSessions', activeSession.id), updated);
       showToast('Data iuran berhasil disimpan di Firebase', 'success');
       onClose();
     } catch (err) { 
@@ -6025,16 +7186,264 @@ function ModalFormIuranItem({ item, activeSession, showToast, onClose }: { item:
     }
   };
 
+  const quickAmounts = [25000, 50000, 100000, 200000, 500000];
+
   return (
-    <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl">
-        <div className="bg-green-700 p-4 text-white font-bold text-sm">{item ? 'Edit Baris Iuran' : 'Catat Iuran Baru'}</div>
-        <form onSubmit={handleSave} className="p-5 space-y-4">
-          <input placeholder="Nama Anggota" required className="w-full border-2 p-3 rounded-xl text-sm outline-none focus:border-green-600 font-bold" value={formData.name} onChange={e=>setFormData({...formData, name: e.target.value})} autoFocus />
-          <input type="number" placeholder="Nominal (Rp)" required className="w-full border-2 p-3 rounded-xl text-xl font-black text-green-700 outline-none focus:border-green-600" value={formData.amount} onChange={e=>setFormData({...formData, amount: e.target.value})} />
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose} className="flex-1 py-3 border-2 text-gray-600 rounded-xl font-bold cursor-pointer">Batal</button>
-            <button type="submit" className="flex-1 py-3 bg-green-600 text-white rounded-xl font-bold shadow-md cursor-pointer">Simpan Data</button>
+    <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-3 sm:p-4 animate-fade-in">
+      <div className="bg-white rounded-3xl w-full max-w-md max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+        {/* HEADER MODAL */}
+        <div className="bg-gradient-to-r from-green-700 to-emerald-700 p-4 text-white font-bold text-sm flex items-center justify-between shadow-xs flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <Wallet size={18} />
+            <span>{item ? 'Edit Baris Iuran' : 'Catat Iuran Baru'}</span>
+          </div>
+          <button 
+            type="button" 
+            onClick={onClose} 
+            className="p-1 hover:bg-white/20 rounded-full transition cursor-pointer text-white"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* FORM BODY */}
+        <form onSubmit={handleSave} className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
+          {/* FIELD 1: NAMA ANGGOTA DENGAN POPUP / DROPDOWN SEMUA DATA */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
+                <Users size={14} className="text-green-700" />
+                <span>Nama Anggota Keluarga</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => setIsPickerOpen(!isPickerOpen)}
+                className="text-[11px] font-bold text-green-700 hover:text-green-800 bg-green-50 hover:bg-green-100 border border-green-200 px-2.5 py-0.5 rounded-full transition flex items-center gap-1 cursor-pointer"
+              >
+                <span>{isPickerOpen ? 'Tutup Daftar' : `Pilih dari ${candidates.length} Anggota`}</span>
+                <ChevronDown size={12} className={`transition-transform duration-200 ${isPickerOpen ? 'rotate-180' : ''}`} />
+              </button>
+            </div>
+
+            {/* INPUT FIELD NAMA ANGGOTA */}
+            <div className="relative">
+              <input 
+                placeholder="Klik di sini untuk memilih nama anggota..." 
+                required 
+                className="w-full border-2 border-gray-200 focus:border-green-600 hover:border-green-400 p-3 pr-10 rounded-2xl text-sm outline-none font-bold text-gray-800 bg-gray-50 focus:bg-white transition cursor-pointer" 
+                value={formData.name} 
+                onClick={() => setIsPickerOpen(true)}
+                onFocus={() => setIsPickerOpen(true)}
+                onChange={e => {
+                  setFormData({ ...formData, name: e.target.value });
+                  setSearchFilter(e.target.value);
+                }} 
+                autoFocus 
+              />
+              <button
+                type="button"
+                onClick={() => setIsPickerOpen(!isPickerOpen)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-green-700 cursor-pointer p-1"
+                title="Buka daftar nama anggota"
+              >
+                <ChevronDown size={18} className={`transition-transform duration-200 ${isPickerOpen ? 'rotate-180' : ''}`} />
+              </button>
+            </div>
+
+            {/* DAFTAR PILIHAN ANGGOTA (MUNCUL KETIKA ADMIN KLIK NAMA ANGGOTA) */}
+            {isPickerOpen && (
+              <div className="mt-2.5 bg-gray-50 border-2 border-green-500/40 rounded-2xl p-3 shadow-lg space-y-2.5 animate-fade-in">
+                <div className="flex items-center justify-between gap-2 border-b pb-2">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-gray-700">
+                    <Sparkles size={14} className="text-amber-500" />
+                    <span>Pilih Anggota ({filteredCandidates.length} tersedia):</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsPickerOpen(false)}
+                    className="text-[10px] font-bold text-gray-400 hover:text-gray-600 cursor-pointer p-0.5"
+                  >
+                    Tutup ✕
+                  </button>
+                </div>
+
+                {/* SEARCH INPUT DALAM PICKER */}
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Ketik untuk memfilter nama..."
+                    value={searchFilter}
+                    onChange={e => setSearchFilter(e.target.value)}
+                    className="w-full pl-8 pr-8 py-2 text-xs bg-white border border-gray-300 rounded-xl outline-none focus:border-green-600 font-semibold"
+                  />
+                  {searchFilter && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchFilter('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+
+                {/* FILTER GENERASI PILLS */}
+                <div className="flex gap-1 overflow-x-auto pb-1 no-scrollbar text-[10.5px]">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedGenFilter('all')}
+                    className={`px-2 py-0.5 rounded-lg font-bold whitespace-nowrap transition cursor-pointer ${
+                      selectedGenFilter === 'all' 
+                        ? 'bg-green-700 text-white' 
+                        : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+                    }`}
+                  >
+                    Semua ({candidates.length})
+                  </button>
+                  {availableGens.map(g => (
+                    <button
+                      key={g}
+                      type="button"
+                      onClick={() => setSelectedGenFilter(g)}
+                      className={`px-2 py-0.5 rounded-lg font-bold whitespace-nowrap transition cursor-pointer ${
+                        selectedGenFilter === g 
+                          ? 'bg-green-700 text-white' 
+                          : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+                      }`}
+                    >
+                      Gen {g}
+                    </button>
+                  ))}
+                </div>
+
+                {/* DAFTAR ROSTER ANGGOTA (BISA DIKLIK LANGSUNG) */}
+                <div className="max-h-52 overflow-y-auto space-y-1 divide-y divide-gray-100 pr-1">
+                  {filteredCandidates.map(c => {
+                    const isSelected = formData.name.trim().toLowerCase() === c.name.trim().toLowerCase();
+                    return (
+                      <div
+                        key={c.id}
+                        onClick={() => handleSelectMember(c.name)}
+                        className={`p-2.5 rounded-xl cursor-pointer flex items-center justify-between gap-2 transition ${
+                          isSelected 
+                            ? 'bg-green-100/90 border border-green-400 text-green-900' 
+                            : 'hover:bg-white bg-white/70 hover:shadow-2xs text-gray-800'
+                        }`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs">{c.gender === 'L' ? '👤' : '🧕'}</span>
+                            <span className="text-xs font-bold truncate">{c.name}</span>
+                            <span className={`text-[9px] font-black px-1.5 py-0.2 rounded-full border ${c.genLabel.badge}`}>
+                              {c.genLabel.icon} Gen {c.gen}
+                            </span>
+                            {!c.isAlive && (
+                              <span className="text-[8.5px] bg-gray-200 text-gray-600 px-1 py-0.2 rounded font-semibold">
+                                Almarhum
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-gray-500 truncate mt-0.5">
+                            {c.subtitle} {c.domicile ? `• ${c.domicile}` : ''}
+                          </p>
+                        </div>
+                        {isSelected && (
+                          <div className="flex-shrink-0 text-green-700">
+                            <Check size={16} />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {filteredCandidates.length === 0 && (
+                    <div className="p-4 text-center text-xs text-gray-400 space-y-1">
+                      <p>Tidak ada nama anggota cocok dengan pencarian.</p>
+                      {searchFilter && (
+                        <button
+                          type="button"
+                          onClick={() => handleSelectMember(searchFilter)}
+                          className="text-[11px] font-bold text-green-700 bg-green-100 px-3 py-1 rounded-lg hover:bg-green-200 transition mt-1 cursor-pointer"
+                        >
+                          Gunakan "{searchFilter}" sebagai nama kustom
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-1 border-t flex justify-between items-center text-[10.5px] text-gray-500">
+                  <span>💡 Klik salah satu nama di atas untuk memilih</span>
+                  <button
+                    type="button"
+                    onClick={() => setIsPickerOpen(false)}
+                    className="font-bold text-green-700 hover:underline cursor-pointer"
+                  >
+                    Selesai Memilih
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* FIELD 2: NOMINAL (RP) */}
+          <div>
+            <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+              <span>Nominal Iuran (Rp)</span>
+              {formData.amount && Number(formData.amount) > 0 && (
+                <span className="text-green-700 font-extrabold text-xs">
+                  {formatRupiah ? formatRupiah(Number(formData.amount)) : `Rp ${Number(formData.amount).toLocaleString('id-ID')}`}
+                </span>
+              )}
+            </label>
+            <input 
+              ref={amountInputRef}
+              type="number" 
+              placeholder="Contoh: 100000" 
+              required 
+              min="1000"
+              step="1000"
+              className="w-full border-2 border-gray-200 focus:border-green-600 p-3 rounded-2xl text-xl font-black text-green-700 outline-none transition bg-white" 
+              value={formData.amount} 
+              onChange={e=>setFormData({...formData, amount: e.target.value})} 
+            />
+
+            {/* QUICK AMOUNT CHIPS */}
+            <div className="flex gap-1.5 flex-wrap mt-2">
+              <span className="text-[10px] font-bold text-gray-400 self-center mr-0.5">Pilihan Cepat:</span>
+              {quickAmounts.map(amt => (
+                <button
+                  key={amt}
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, amount: amt.toString() }))}
+                  className={`text-[10.5px] font-bold px-2.5 py-1 rounded-xl border transition cursor-pointer ${
+                    Number(formData.amount) === amt
+                      ? 'bg-green-700 text-white border-green-700 shadow-xs'
+                      : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-200'
+                  }`}
+                >
+                  {formatRupiah ? formatRupiah(amt) : `Rp ${amt.toLocaleString('id-ID')}`}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* TOMBOL AKSI */}
+          <div className="flex gap-3 pt-3">
+            <button 
+              type="button" 
+              onClick={onClose} 
+              className="flex-1 py-3 border-2 border-gray-200 hover:bg-gray-100 text-gray-700 rounded-2xl font-bold text-sm cursor-pointer transition"
+            >
+              Batal
+            </button>
+            <button 
+              type="submit" 
+              className="flex-1 py-3 bg-gradient-to-r from-green-600 to-emerald-700 hover:from-green-700 hover:to-emerald-800 text-white rounded-2xl font-bold text-sm shadow-md hover:shadow-lg cursor-pointer transition active:scale-[0.98]"
+            >
+              Simpan Data
+            </button>
           </div>
         </form>
       </div>

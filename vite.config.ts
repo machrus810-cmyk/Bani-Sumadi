@@ -11,7 +11,7 @@ export default defineConfig(() => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icon.svg', 'pwa-192x192.png', 'pwa-512x512.png', 'logo.jpg'],
+        includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icon.svg', 'pwa-192x192.png', 'pwa-512x512.png', 'logo.jpg', 'notification.wav', 'notification.mp3'],
         manifest: {
           id: '/',
           name: 'Keluarga Besar KH. SUMADI',
@@ -44,7 +44,8 @@ export default defineConfig(() => {
           ],
         },
         workbox: {
-          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,mp3,wav}'],
+          importScripts: ['/sw-alarm.js'],
           runtimeCaching: [
             {
               urlPattern: /^https:\/\/cdnjs\.cloudflare\.com\/.*/i,
