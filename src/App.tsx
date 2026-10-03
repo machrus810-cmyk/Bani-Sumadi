@@ -2441,107 +2441,161 @@ function ModalKelolaFoto({
 }
 
 // ==========================================
-// BACKGROUND ORNAMEN ISLAMI CERAH (POHON SILSILAH)
+// BACKGROUND ORNAMEN ISLAMIC MODERN CERAH (POHON SILSILAH)
 // ==========================================
 function IslamicTreeBackground() {
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden select-none z-0">
-      {/* 1. Warna Dasar Cerah (Parchment Ivory & Marble Nuance) */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#FDFCF7] via-[#F8F3E9] to-[#EFE7D8]" />
+      {/* 1. Warna Dasar Cerah Alabaster & Marble Pearl Nuance */}
+      <div className="absolute inset-0 bg-gradient-to-b from-[#FCFAF6] via-[#F8F4EA] to-[#F1E9D8]" />
 
-      {/* 2. Pencahayaan Gradasi Lembut Emas & Zamrud (Ambient Light) */}
+      {/* 2. Pencahayaan Gradasi Lembut Emas & Zamrud Modern (Ambient Glow) */}
       <div 
-        className="absolute inset-0 opacity-60"
+        className="absolute inset-0 opacity-70"
         style={{
-          background: 'radial-gradient(ellipse at 50% 10%, rgba(217, 119, 6, 0.12) 0%, rgba(16, 185, 129, 0.08) 35%, rgba(245, 158, 11, 0.03) 65%, transparent 80%)'
+          background: 'radial-gradient(ellipse at 50% 12%, rgba(217, 148, 26, 0.14) 0%, rgba(16, 185, 129, 0.07) 38%, rgba(245, 158, 11, 0.02) 70%, transparent 85%)'
         }}
       />
 
-      {/* 3. Motif Pola Geometris Bintang 8 Islami (Girih & Arabesque Tessellation) */}
-      <svg className="absolute inset-0 w-full h-full opacity-[0.25]" xmlns="http://www.w3.org/2000/svg">
+      {/* 3. Motif Pola Geometris Girih & Arabesque Tessellation Bintang 8 Modern */}
+      <svg className="absolute inset-0 w-full h-full opacity-[0.28]" xmlns="http://www.w3.org/2000/svg">
         <defs>
-          <pattern id="islamic-star-pattern" width="80" height="80" patternUnits="userSpaceOnUse">
-            {/* Bintang 8 Sudut Islami di Pusat (Khatam / Rub el Hizb) */}
+          <pattern id="islamic-modern-girih-pattern" width="100" height="100" patternUnits="userSpaceOnUse">
+            {/* Latar Belakang Subtle Poligon Interlace */}
+            <rect width="100" height="100" fill="none" />
+            
+            {/* Bintang 8 Sudut Islami Pusat (Khatam Sulayman) */}
             <path
-              d="M40 10 L46 26 L62 20 L56 36 L70 40 L56 44 L62 60 L46 54 L40 70 L34 54 L18 60 L24 44 L10 40 L24 36 L18 20 L34 26 Z"
-              fill="rgba(217, 119, 6, 0.04)"
-              stroke="#B48232"
-              strokeWidth="0.9"
+              d="M50 15 L57 33 L75 25 L67 43 L85 50 L67 57 L75 75 L57 67 L50 85 L43 67 L25 75 L33 57 L15 50 L33 43 L25 25 L43 33 Z"
+              fill="rgba(217, 148, 26, 0.035)"
+              stroke="#B8860B"
+              strokeWidth="0.85"
+              strokeLinejoin="round"
             />
-            {/* Oktagon Geometris Dalam */}
+            {/* Oktagon Geometris Dalam dengan Aksen Zamrud */}
             <polygon
-              points="40,23 48,27 51,36 48,45 40,49 32,45 29,36 32,27"
-              fill="rgba(21, 128, 61, 0.04)"
-              stroke="#15803D"
+              points="50,29 60,34 65,45 60,56 50,61 40,56 35,45 40,34"
+              fill="rgba(16, 149, 102, 0.03)"
+              stroke="#0D9488"
               strokeWidth="0.75"
+              strokeLinejoin="round"
             />
-            {/* Bagian Bintang Sudut Luar untuk Tiling Mulus */}
+            {/* Titik Pusat Bintang Berkilau */}
+            <circle cx="50" cy="50" r="3.5" fill="none" stroke="#D97706" strokeWidth="0.75" />
+            <circle cx="50" cy="50" r="1" fill="#B48232" />
+
+            {/* Bintang Sudut Luar (Untuk Kesinambungan Tiling Mulus) */}
+            {/* Sudut Kiri-Atas (0,0) */}
             <path
-              d="M0 0 L6 10 L16 4 L12 16 L20 20 L12 24 L16 36 L6 30 L0 40"
+              d="M0 15 L7 17 L15 0 L17 7 L35 0 L27 18 L45 25 L27 32 L35 50 L17 43 L15 50 L7 33 L0 35 L0 15"
               fill="none"
-              stroke="#B48232"
+              stroke="#B8860B"
               strokeWidth="0.75"
+              strokeLinejoin="round"
             />
+            {/* Sudut Kanan-Atas (100,0) */}
             <path
-              d="M80 0 L74 10 L64 4 L68 16 L60 20 L68 24 L64 36 L74 30 L80 40"
+              d="M100 15 L93 17 L85 0 L83 7 L65 0 L73 18 L55 25 L73 32 L65 50 L83 43 L85 50 L93 33 L100 35 L100 15"
               fill="none"
-              stroke="#B48232"
+              stroke="#B8860B"
               strokeWidth="0.75"
+              strokeLinejoin="round"
             />
+            {/* Sudut Kiri-Bawah (0,100) */}
             <path
-              d="M0 80 L6 70 L16 76 L12 64 L20 60 L12 56 L16 44 L6 50 L0 40"
+              d="M0 85 L7 83 L15 100 L17 93 L35 100 L27 82 L45 75 L27 68 L35 50 L17 57 L15 50 L7 67 L0 65 L0 85"
               fill="none"
-              stroke="#B48232"
+              stroke="#B8860B"
               strokeWidth="0.75"
+              strokeLinejoin="round"
             />
+            {/* Sudut Kanan-Bawah (100,100) */}
             <path
-              d="M80 80 L74 70 L64 76 L68 64 L60 60 L68 56 L64 44 L74 50 L80 40"
+              d="M100 85 L93 83 L85 100 L83 93 L65 100 L73 82 L55 75 L73 68 L65 50 L83 57 L85 50 L93 67 L100 65 L100 85"
               fill="none"
-              stroke="#B48232"
+              stroke="#B8860B"
               strokeWidth="0.75"
+              strokeLinejoin="round"
             />
-            {/* Garis Kisi Interlace Lembut */}
-            <line x1="0" y1="40" x2="80" y2="40" stroke="#B48232" strokeWidth="0.5" strokeDasharray="3 3" opacity="0.5" />
-            <line x1="40" y1="0" x2="40" y2="80" stroke="#B48232" strokeWidth="0.5" strokeDasharray="3 3" opacity="0.5" />
+
+            {/* Garis Arabesque Geometris Diagonal Halus */}
+            <line x1="0" y1="0" x2="100" y2="100" stroke="#C59B27" strokeWidth="0.4" strokeDasharray="4 4" opacity="0.4" />
+            <line x1="100" y1="0" x2="0" y2="100" stroke="#C59B27" strokeWidth="0.4" strokeDasharray="4 4" opacity="0.4" />
+            <line x1="50" y1="0" x2="50" y2="100" stroke="#B8860B" strokeWidth="0.4" strokeDasharray="3 3" opacity="0.3" />
+            <line x1="0" y1="50" x2="100" y2="50" stroke="#B8860B" strokeWidth="0.4" strokeDasharray="3 3" opacity="0.3" />
           </pattern>
         </defs>
-        <rect width="100%" height="100%" fill="url(#islamic-star-pattern)" />
+        <rect width="100%" height="100%" fill="url(#islamic-modern-girih-pattern)" />
       </svg>
 
-      {/* 4. Ornamen Lengkung & Sudut Kaligrafi / Arabesque Klasik */}
+      {/* 4. Siluet Lengkung Kubah / Mihrab Islamic Modern di Puncak */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] max-w-full h-32 opacity-25 pointer-events-none">
+        <svg viewBox="0 0 700 120" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+          {/* Kubah Mahkota Halus */}
+          <path 
+            d="M50 0 C150 0 240 70 350 70 C460 70 550 0 650 0" 
+            stroke="#B8860B" 
+            strokeWidth="1.5" 
+            strokeDasharray="4 4"
+            fill="none" 
+          />
+          <path 
+            d="M100 0 C200 0 270 50 350 50 C430 50 500 0 600 0" 
+            stroke="#0D9488" 
+            strokeWidth="1" 
+            fill="none" 
+          />
+          {/* Medallion Bintang 8 Puncak */}
+          <g transform="translate(350, 50)">
+            <circle cx="0" cy="0" r="16" fill="rgba(217, 148, 26, 0.08)" stroke="#B8860B" strokeWidth="1" />
+            <path d="M0 -12 L3 -3 L12 0 L3 3 L0 12 L-3 3 L-12 0 L-3 -3 Z" fill="#D97706" opacity="0.8" />
+          </g>
+        </svg>
+      </div>
+
+      {/* 5. Ornamen Sudut Arabesque Modern Mewah & Elegan */}
       {/* Sudut Kiri Atas */}
-      <div className="absolute top-1 left-1 w-24 h-24 opacity-30 pointer-events-none">
+      <div className="absolute top-2 left-2 w-28 h-28 opacity-35 pointer-events-none">
         <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M0 0 L90 0 C60 0 40 20 40 50 C40 80 20 90 0 90 L0 0 Z" fill="rgba(217, 119, 6, 0.08)" />
-          <path d="M4 4 L75 4 C50 4 35 18 35 45 C35 70 20 75 4 75 Z" stroke="#B48232" strokeWidth="1.2" fill="none" />
-          <circle cx="18" cy="18" r="4" fill="#15803D" opacity="0.5" />
+          <path d="M0 0 L90 0 C55 0 35 20 35 55 C35 90 20 90 0 90 L0 0 Z" fill="rgba(217, 148, 26, 0.06)" />
+          <path d="M4 4 L78 4 C50 4 32 20 32 50 C32 78 20 78 4 78 Z" stroke="#B8860B" strokeWidth="1.2" fill="none" />
+          <path d="M10 10 L50 10 C35 10 24 20 24 35 C24 50 15 50 10 50 Z" stroke="#0D9488" strokeWidth="0.8" strokeDasharray="2 2" fill="none" />
+          {/* Mini Star Accents */}
+          <circle cx="20" cy="20" r="3.5" fill="none" stroke="#B8860B" strokeWidth="1" />
+          <polygon points="20,17 21.5,19.5 24,20 21.5,20.5 20,23 18.5,20.5 16,20 18.5,19.5" fill="#D97706" />
         </svg>
       </div>
 
       {/* Sudut Kanan Atas */}
-      <div className="absolute top-1 right-1 w-24 h-24 opacity-30 pointer-events-none scale-x-[-1]">
+      <div className="absolute top-2 right-2 w-28 h-28 opacity-35 pointer-events-none scale-x-[-1]">
         <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M0 0 L90 0 C60 0 40 20 40 50 C40 80 20 90 0 90 L0 0 Z" fill="rgba(217, 119, 6, 0.08)" />
-          <path d="M4 4 L75 4 C50 4 35 18 35 45 C35 70 20 75 4 75 Z" stroke="#B48232" strokeWidth="1.2" fill="none" />
-          <circle cx="18" cy="18" r="4" fill="#15803D" opacity="0.5" />
+          <path d="M0 0 L90 0 C55 0 35 20 35 55 C35 90 20 90 0 90 L0 0 Z" fill="rgba(217, 148, 26, 0.06)" />
+          <path d="M4 4 L78 4 C50 4 32 20 32 50 C32 78 20 78 4 78 Z" stroke="#B8860B" strokeWidth="1.2" fill="none" />
+          <path d="M10 10 L50 10 C35 10 24 20 24 35 C24 50 15 50 10 50 Z" stroke="#0D9488" strokeWidth="0.8" strokeDasharray="2 2" fill="none" />
+          <circle cx="20" cy="20" r="3.5" fill="none" stroke="#B8860B" strokeWidth="1" />
+          <polygon points="20,17 21.5,19.5 24,20 21.5,20.5 20,23 18.5,20.5 16,20 18.5,19.5" fill="#D97706" />
         </svg>
       </div>
 
       {/* Sudut Kiri Bawah */}
-      <div className="absolute bottom-1 left-1 w-24 h-24 opacity-30 pointer-events-none scale-y-[-1]">
+      <div className="absolute bottom-2 left-2 w-28 h-28 opacity-35 pointer-events-none scale-y-[-1]">
         <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M0 0 L90 0 C60 0 40 20 40 50 C40 80 20 90 0 90 L0 0 Z" fill="rgba(217, 119, 6, 0.08)" />
-          <path d="M4 4 L75 4 C50 4 35 18 35 45 C35 70 20 75 4 75 Z" stroke="#B48232" strokeWidth="1.2" fill="none" />
-          <circle cx="18" cy="18" r="4" fill="#15803D" opacity="0.5" />
+          <path d="M0 0 L90 0 C55 0 35 20 35 55 C35 90 20 90 0 90 L0 0 Z" fill="rgba(217, 148, 26, 0.06)" />
+          <path d="M4 4 L78 4 C50 4 32 20 32 50 C32 78 20 78 4 78 Z" stroke="#B8860B" strokeWidth="1.2" fill="none" />
+          <path d="M10 10 L50 10 C35 10 24 20 24 35 C24 50 15 50 10 50 Z" stroke="#0D9488" strokeWidth="0.8" strokeDasharray="2 2" fill="none" />
+          <circle cx="20" cy="20" r="3.5" fill="none" stroke="#B8860B" strokeWidth="1" />
+          <polygon points="20,17 21.5,19.5 24,20 21.5,20.5 20,23 18.5,20.5 16,20 18.5,19.5" fill="#D97706" />
         </svg>
       </div>
 
       {/* Sudut Kanan Bawah */}
-      <div className="absolute bottom-1 right-1 w-24 h-24 opacity-30 pointer-events-none scale-[-1]">
+      <div className="absolute bottom-2 right-2 w-28 h-28 opacity-35 pointer-events-none scale-[-1]">
         <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M0 0 L90 0 C60 0 40 20 40 50 C40 80 20 90 0 90 L0 0 Z" fill="rgba(217, 119, 6, 0.08)" />
-          <path d="M4 4 L75 4 C50 4 35 18 35 45 C35 70 20 75 4 75 Z" stroke="#B48232" strokeWidth="1.2" fill="none" />
-          <circle cx="18" cy="18" r="4" fill="#15803D" opacity="0.5" />
+          <path d="M0 0 L90 0 C55 0 35 20 35 55 C35 90 20 90 0 90 L0 0 Z" fill="rgba(217, 148, 26, 0.06)" />
+          <path d="M4 4 L78 4 C50 4 32 20 32 50 C32 78 20 78 4 78 Z" stroke="#B8860B" strokeWidth="1.2" fill="none" />
+          <path d="M10 10 L50 10 C35 10 24 20 24 35 C24 50 15 50 10 50 Z" stroke="#0D9488" strokeWidth="0.8" strokeDasharray="2 2" fill="none" />
+          <circle cx="20" cy="20" r="3.5" fill="none" stroke="#B8860B" strokeWidth="1" />
+          <polygon points="20,17 21.5,19.5 24,20 21.5,20.5 20,23 18.5,20.5 16,20 18.5,19.5" fill="#D97706" />
         </svg>
       </div>
     </div>
@@ -2623,7 +2677,7 @@ function PanZoomWrapper({
   return (
     <div 
       ref={containerRef} 
-      className="absolute inset-0 bg-[#FAF7EE] cursor-grab active:cursor-grabbing touch-none overflow-hidden select-none"
+      className="absolute inset-0 bg-[#FCFAF6] cursor-grab active:cursor-grabbing touch-none overflow-hidden select-none"
       onMouseDown={(e) => { isDragging.current = true; dragStart.current = { x: e.clientX - position.x, y: e.clientY - position.y }; }}
       onMouseMove={(e) => { if(isDragging.current) setPosition({ x: e.clientX - dragStart.current.x, y: e.clientY - dragStart.current.y }); }}
       onMouseUp={() => isDragging.current = false} 
@@ -4344,99 +4398,149 @@ function ProfilePopupCard({
       onClick={onClose}
     >
       <div 
-        className="bg-[#faf7f2] rounded-[2.25rem] w-full max-w-sm max-h-[92vh] shadow-2xl flex flex-col overflow-hidden relative border border-amber-200/60" 
+        className="bg-gradient-to-b from-[#FCFBF8] via-[#F8F4EC] to-[#EFE7D8] rounded-[2.25rem] w-full max-w-sm max-h-[92vh] shadow-2xl flex flex-col overflow-hidden relative border-2 border-amber-400/80 ring-1 ring-emerald-600/20 text-gray-800" 
         onClick={e => e.stopPropagation()}
       >
+        {/* BACKGROUND ORNAMEN ISLAMIC MODERN */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden select-none z-0">
+          {/* Lengkungan Kubah / Mihrab Islami Modern Bagian Atas */}
+          <div className="absolute top-0 inset-x-0 h-36 bg-gradient-to-br from-emerald-950 via-teal-900 to-emerald-900 rounded-b-[2.5rem] shadow-md border-b-2 border-amber-400/60" />
+          
+          {/* Efek Cahaya / Ambient Radiant Light */}
+          <div className="absolute top-0 inset-x-0 h-44 opacity-40 bg-[radial-gradient(circle_at_50%_20%,rgba(245,158,11,0.25),transparent_70%)]" />
+
+          {/* Watermark Pola Geometris Bintang 8 Islami */}
+          <svg className="absolute inset-0 w-full h-full opacity-[0.16]" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <pattern id="islamic-modal-pattern" width="60" height="60" patternUnits="userSpaceOnUse">
+                <path
+                  d="M30 6 L35 19 L48 14 L43 27 L54 30 L43 33 L48 46 L35 41 L30 54 L25 41 L12 46 L17 33 L6 30 L17 27 L12 14 L25 19 Z"
+                  fill="none"
+                  stroke="#B48232"
+                  strokeWidth="0.8"
+                />
+                <polygon
+                  points="30,16 36,19 39,26 36,33 30,36 24,33 21,26 24,19"
+                  fill="rgba(180, 130, 50, 0.05)"
+                  stroke="#15803D"
+                  strokeWidth="0.6"
+                />
+                <line x1="0" y1="30" x2="60" y2="30" stroke="#B48232" strokeWidth="0.4" strokeDasharray="2 2" opacity="0.4" />
+                <line x1="30" y1="0" x2="30" y2="60" stroke="#B48232" strokeWidth="0.4" strokeDasharray="2 2" opacity="0.4" />
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#islamic-modal-pattern)" />
+          </svg>
+
+          {/* Ornamen Sudut Bawah */}
+          <div className="absolute bottom-2 left-2 w-16 h-16 opacity-25">
+            <svg viewBox="0 0 100 100" fill="none">
+              <path d="M0 100 L70 100 C45 100 30 85 30 60 C30 35 15 20 0 0 L0 100 Z" fill="rgba(217,119,6,0.1)" />
+              <path d="M4 96 L60 96 C40 96 26 82 26 58 C26 34 14 22 4 4 Z" stroke="#B48232" strokeWidth="1.2" />
+            </svg>
+          </div>
+          <div className="absolute bottom-2 right-2 w-16 h-16 opacity-25 scale-x-[-1]">
+            <svg viewBox="0 0 100 100" fill="none">
+              <path d="M0 100 L70 100 C45 100 30 85 30 60 C30 35 15 20 0 0 L0 100 Z" fill="rgba(217,119,6,0.1)" />
+              <path d="M4 96 L60 96 C40 96 26 82 26 58 C26 34 14 22 4 4 Z" stroke="#B48232" strokeWidth="1.2" />
+            </svg>
+          </div>
+        </div>
+
         {/* TOMBOL TUTUP / CLOSE */}
         <button 
-          className="absolute top-3.5 right-3.5 bg-black/5 hover:bg-black/15 text-gray-500 hover:text-gray-800 p-2 rounded-full z-20 transition cursor-pointer" 
+          className="absolute top-3.5 right-3.5 bg-white/20 hover:bg-white/35 text-white p-2 rounded-full z-20 transition cursor-pointer backdrop-blur-md border border-white/30 shadow-md active:scale-95" 
           onClick={onClose}
           title="Tutup"
         >
           <X size={18}/>
         </button>
 
-        <div className="p-5 sm:p-6 overflow-y-auto space-y-4">
+        <div className="p-5 sm:p-6 overflow-y-auto space-y-4 relative z-10">
           
-          {/* FOTO PROFIL BULAT & HEADER */}
+          {/* FOTO PROFIL DENGAN MEDALION FRAME EMAS ISLAMI & HEADER */}
           <div className="flex flex-col items-center">
-            <div className="relative my-1">
-              <div className="w-32 h-32 sm:w-36 sm:h-36 rounded-full p-1 bg-white shadow-xl border-2 border-amber-300/90 ring-4 ring-amber-200/70 overflow-hidden flex items-center justify-center transition-transform duration-200 hover:scale-[1.02]">
+            <div className="relative my-1 mt-3">
+              <div className="w-32 h-32 sm:w-36 sm:h-36 rounded-full p-1.5 bg-gradient-to-tr from-amber-400 via-yellow-200 to-emerald-400 shadow-2xl ring-4 ring-amber-300/90 ring-offset-4 ring-offset-emerald-950 overflow-hidden flex items-center justify-center transition-transform duration-300 hover:scale-[1.03]">
                 {profile.photo ? (
-                  <img src={profile.photo} className="w-full h-full rounded-full object-cover" alt={profile.name} />
+                  <img src={profile.photo} className="w-full h-full rounded-full object-cover shadow-inner" alt={profile.name} />
                 ) : (
-                  <div className={`w-full h-full rounded-full flex items-center justify-center ${profile.gender === 'L' ? 'bg-blue-100/70 text-blue-500' : 'bg-pink-100/70 text-pink-500'}`}>
+                  <div className={`w-full h-full rounded-full flex items-center justify-center ${profile.gender === 'L' ? 'bg-blue-100 text-blue-600' : 'bg-pink-100 text-pink-600'}`}>
                     <Users size={52} />
                   </div>
                 )}
               </div>
               {!profile.isAlive && (
-                <span className="absolute bottom-1 right-1 bg-gray-800 text-white text-[9.5px] font-black px-2.5 py-0.5 rounded-full border-2 border-white shadow-md z-10">
+                <span className="absolute bottom-1 right-1 bg-gray-900 text-amber-300 text-[10px] font-black px-2.5 py-0.5 rounded-full border-2 border-amber-400 shadow-lg z-20">
                   ALM
                 </span>
               )}
             </div>
 
             {/* NAMA LENGKAP */}
-            <h2 className="text-xl sm:text-2xl font-black text-gray-900 text-center mt-3 leading-tight tracking-tight">
+            <h2 className="text-xl sm:text-2xl font-black text-emerald-950 text-center mt-3 leading-tight tracking-tight drop-shadow-xs">
               {profile.name}
             </h2>
 
-            {/* KETERANGAN GARIS KETURUNAN / SUBTITLE */}
-            <p className="text-xs text-amber-900/80 font-semibold text-center mt-1">
-              {profile.subtitle}
-            </p>
+            {/* KETERANGAN GARIS KETURUNAN / SUBTITLE DENGAN AKSEN EMAS */}
+            <div className="mt-1.5 flex justify-center">
+              <span className="text-xs text-amber-950 font-bold bg-amber-100/90 px-3.5 py-1 rounded-full border border-amber-300/80 shadow-2xs inline-flex items-center gap-1.5">
+                <span className="text-amber-600">✦</span>
+                <span>{profile.subtitle}</span>
+                <span className="text-amber-600">✦</span>
+              </span>
+            </div>
           </div>
 
           {/* KARTU INFORMASI UTAMA (TANGGAL LAHIR, DOMISILI, MENIKAH, JUMLAH ANAK) */}
-          <div className="bg-[#f2ece1]/90 rounded-2xl p-3.5 sm:p-4 space-y-3 border border-amber-200/50 shadow-xs text-xs text-gray-800 font-medium">
+          <div className="bg-white/95 backdrop-blur-md rounded-2xl p-4 space-y-3.5 border-2 border-amber-200/80 shadow-md text-xs text-gray-800 font-medium">
             {/* ROW 1: TANGGAL LAHIR & USIA */}
             <div className="flex items-center gap-3">
-              <div className="w-6 flex justify-center text-gray-600 flex-shrink-0">
-                <Calendar size={18} />
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-100 to-teal-50 text-emerald-800 border border-emerald-200/90 flex items-center justify-center flex-shrink-0 shadow-2xs">
+                <Calendar size={16} />
               </div>
-              <span className="font-semibold text-gray-800 break-words flex-1">
+              <span className="font-bold text-gray-900 break-words flex-1">
                 {formatBirthDateAndAge(profile.birthDate, profile.isAlive, profile.deathDate)}
               </span>
             </div>
 
             {/* ROW 2: DOMISILI */}
             <div className="flex items-center gap-3">
-              <div className="w-6 flex justify-center text-gray-600 flex-shrink-0">
-                <MapPin size={18} />
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-100 to-teal-50 text-emerald-800 border border-emerald-200/90 flex items-center justify-center flex-shrink-0 shadow-2xs">
+                <MapPin size={16} />
               </div>
-              <span className="font-semibold text-gray-800 break-words flex-1">
+              <span className="font-bold text-gray-900 break-words flex-1">
                 {profile.domicile || 'Domisili belum diisi'}
               </span>
             </div>
 
             {/* ROW 3: STATUS PERNIKAHAN */}
             <div className="flex items-center gap-3">
-              <div className="w-6 flex justify-center text-gray-600 flex-shrink-0">
-                <InfinityIcon size={18} />
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-100 to-teal-50 text-emerald-800 border border-emerald-200/90 flex items-center justify-center flex-shrink-0 shadow-2xs">
+                <InfinityIcon size={16} />
               </div>
-              <span className="font-semibold text-gray-800 flex-1">
+              <span className="font-bold text-gray-900 flex-1">
                 {profile.maritalStatus}
               </span>
             </div>
 
             {/* ROW 4: JUMLAH ANAK */}
             <div className="flex items-center gap-3">
-              <div className="w-6 flex justify-center text-gray-600 flex-shrink-0">
-                <Users size={18} />
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-100 to-teal-50 text-emerald-800 border border-emerald-200/90 flex items-center justify-center flex-shrink-0 shadow-2xs">
+                <Users size={16} />
               </div>
-              <span className="font-semibold text-gray-800 flex-1">
+              <span className="font-bold text-gray-900 flex-1">
                 {profile.childrenCount > 0 ? `${profile.childrenCount} Anak` : 'Belum ada data anak'}
               </span>
             </div>
 
             {/* OPSIONAL ROW 5: NO HP (JIKA ADA) */}
             {profile.phone && profile.phone !== '-' && (
-              <div className="flex items-center gap-3 pt-1 border-t border-amber-200/40">
-                <div className="w-6 flex justify-center text-gray-600 flex-shrink-0">
+              <div className="flex items-center gap-3 pt-2 border-t border-amber-200/60">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-100 to-teal-50 text-emerald-800 border border-emerald-200/90 flex items-center justify-center flex-shrink-0 shadow-2xs">
                   <Phone size={16} />
                 </div>
-                <span className="font-semibold text-gray-800 flex-1">
+                <span className="font-bold text-gray-900 flex-1">
                   {profile.phone}
                 </span>
               </div>
@@ -4445,44 +4549,53 @@ function ProfilePopupCard({
 
           {/* SECTION: HUBUNGAN KELUARGA */}
           <div>
-            <h3 className="text-[11px] font-black text-gray-700 uppercase tracking-wider mb-2 px-1">
-              HUBUNGAN KELUARGA
-            </h3>
+            <div className="flex items-center justify-between mb-2 px-1">
+              <h3 className="text-[11px] font-black text-emerald-950 uppercase tracking-wider flex items-center gap-1.5">
+                <span className="text-amber-600 text-xs">✨</span>
+                <span>HUBUNGAN KELUARGA</span>
+                <span className="text-amber-600 text-xs">✨</span>
+              </h3>
+              {profile.relations.length > 0 && (
+                <span className="text-[10px] text-emerald-800 font-bold bg-emerald-100/90 px-2 py-0.5 rounded-full border border-emerald-200 shadow-2xs">
+                  {profile.relations.length} Orang
+                </span>
+              )}
+            </div>
 
-            <div className="bg-[#f2ece1]/90 rounded-2xl divide-y divide-amber-200/50 border border-amber-200/50 overflow-hidden shadow-xs">
+            <div className="bg-white/95 backdrop-blur-md rounded-2xl divide-y divide-amber-100/80 border-2 border-amber-200/80 overflow-hidden shadow-md">
               {profile.relations.length > 0 ? (
                 profile.relations.map((rel, idx) => (
                   <div 
                     key={idx}
                     onClick={() => setCurrentTarget(rel.targetPerson)}
-                    className="flex items-center justify-between p-2.5 sm:p-3 hover:bg-amber-100/70 transition cursor-pointer group"
+                    className="flex items-center justify-between p-3 hover:bg-emerald-50/90 transition-all cursor-pointer group"
                     title={`Klik untuk melihat profil ${rel.name} (${rel.relation})`}
                   >
                     <div className="flex items-center gap-3 min-w-0 flex-1">
-                      {/* AVATAR KECIL */}
-                      <div className="w-10 h-10 rounded-full border border-white bg-white shadow-xs overflow-hidden flex-shrink-0 flex items-center justify-center">
+                      {/* AVATAR KECIL DENGAN RING EMAS */}
+                      <div className="w-11 h-11 rounded-full border-2 border-amber-300/90 bg-white shadow-xs overflow-hidden flex-shrink-0 flex items-center justify-center ring-2 ring-emerald-500/20 group-hover:scale-105 transition-transform">
                         {rel.photo ? (
                           <img src={rel.photo} className="w-full h-full object-cover" alt={rel.name} />
                         ) : (
-                          <div className={`w-full h-full flex items-center justify-center ${rel.gender === 'L' ? 'bg-blue-50 text-blue-500' : 'bg-pink-50 text-pink-500'}`}>
-                            <Users size={16} />
+                          <div className={`w-full h-full flex items-center justify-center ${rel.gender === 'L' ? 'bg-blue-50 text-blue-600' : 'bg-pink-50 text-pink-600'}`}>
+                            <Users size={18} />
                           </div>
                         )}
                       </div>
 
                       {/* INFO HUBUNGAN & NAMA */}
                       <div className="min-w-0 flex-1">
-                        <p className="text-[10px] font-bold text-gray-500 leading-tight">
+                        <span className="text-[9.5px] font-black text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded-md inline-block mb-1 border border-emerald-200/70">
                           {rel.relation}
-                        </p>
-                        <p className="text-xs font-black text-gray-800 truncate group-hover:text-green-800 transition">
+                        </span>
+                        <p className="text-xs font-black text-gray-900 truncate group-hover:text-emerald-800 transition">
                           {rel.name}
                         </p>
                       </div>
                     </div>
 
-                    {/* CHEVRON PANAH KANAN */}
-                    <ChevronRight size={16} className="text-gray-400 group-hover:text-green-800 group-hover:translate-x-0.5 transition-transform flex-shrink-0 ml-2" />
+                    {/* CHEVRON PANAH KANAN EMAS */}
+                    <ChevronRight size={18} className="text-amber-500 group-hover:text-emerald-700 group-hover:translate-x-1 transition-transform flex-shrink-0 ml-2" />
                   </div>
                 ))
               ) : (
@@ -4500,9 +4613,10 @@ function ProfilePopupCard({
                 onNavigateToTree?.(currentTarget);
                 onClose();
               }}
-              className="w-full bg-[#1b4332] hover:bg-[#143326] active:scale-[0.98] text-white font-bold py-3.5 px-6 rounded-full shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 text-sm cursor-pointer"
+              className="w-full bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-800 hover:from-emerald-700 hover:to-teal-700 active:scale-[0.98] text-white font-black py-3.5 px-6 rounded-2xl shadow-lg shadow-emerald-950/20 hover:shadow-xl transition-all flex items-center justify-center gap-2.5 text-sm border-2 border-amber-400/50 cursor-pointer group"
             >
-              Lihat di Pohon Keluarga
+              <Network size={17} className="text-amber-300 group-hover:rotate-12 transition-transform" />
+              <span>Lihat di Pohon Keluarga</span>
             </button>
           </div>
 
