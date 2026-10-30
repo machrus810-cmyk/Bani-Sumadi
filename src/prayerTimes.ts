@@ -24,8 +24,41 @@ export interface CityLocation {
   lng: number;
 }
 
-// Daftar kota-kota utama Indonesia untuk deteksi cepat & fallback offline
+// Konversi tanggal Masehi ke Hijriyah secara akurat
+export function getHijriDate(date: Date = new Date()): string {
+  try {
+    return new Intl.DateTimeFormat('id-ID-u-ca-islamic-umalqura', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    }).format(date);
+  } catch {
+    return '';
+  }
+}
+
+// Format tanggal Masehi Indonesia (misal: "Jumat, 31 Oktober 2026")
+export function formatIndoDate(date: Date = new Date()): string {
+  try {
+    return new Intl.DateTimeFormat('id-ID', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    }).format(date);
+  } catch {
+    return date.toLocaleDateString('id-ID');
+  }
+}
+
+// Daftar kota-kota utama Indonesia (Kota Demak Jawa Tengah di urutan pertama sebagai default)
 export const POPULAR_CITIES: CityLocation[] = [
+  { name: 'Demak', province: 'Jawa Tengah', lat: -6.8944, lng: 110.6385 },
+  { name: 'Semarang', province: 'Jawa Tengah', lat: -6.9666, lng: 110.4166 },
+  { name: 'Kudus', province: 'Jawa Tengah', lat: -6.8048, lng: 110.8405 },
+  { name: 'Jepara', province: 'Jawa Tengah', lat: -6.5891, lng: 110.6684 },
+  { name: 'Pati', province: 'Jawa Tengah', lat: -6.7494, lng: 111.0379 },
+  { name: 'Rembang', province: 'Jawa Tengah', lat: -6.7063, lng: 111.3431 },
   { name: 'Surabaya', province: 'Jawa Timur', lat: -7.2575, lng: 112.7521 },
   { name: 'Tuban', province: 'Jawa Timur', lat: -6.8966, lng: 112.0648 },
   { name: 'Lamongan', province: 'Jawa Timur', lat: -7.1282, lng: 112.4132 },
@@ -36,18 +69,10 @@ export const POPULAR_CITIES: CityLocation[] = [
   { name: 'Malang', province: 'Jawa Timur', lat: -7.9797, lng: 112.6304 },
   { name: 'Kediri', province: 'Jawa Timur', lat: -7.8480, lng: 112.0178 },
   { name: 'Madiun', province: 'Jawa Timur', lat: -7.6298, lng: 111.5239 },
-  { name: 'Pasuruan', province: 'Jawa Timur', lat: -7.6453, lng: 112.9075 },
-  { name: 'Probolinggo', province: 'Jawa Timur', lat: -7.7543, lng: 113.2159 },
-  { name: 'Jember', province: 'Jawa Timur', lat: -8.1845, lng: 113.6681 },
-  { name: 'Banyuwangi', province: 'Jawa Timur', lat: -8.2192, lng: 114.3692 },
-  { name: 'Semarang', province: 'Jawa Tengah', lat: -6.9666, lng: 110.4166 },
   { name: 'Surakarta (Solo)', province: 'Jawa Tengah', lat: -7.5755, lng: 110.8243 },
   { name: 'Yogyakarta', province: 'DI Yogyakarta', lat: -7.7956, lng: 110.3695 },
-  { name: 'Kudus', province: 'Jawa Tengah', lat: -6.8048, lng: 110.8405 },
-  { name: 'Pati', province: 'Jawa Tengah', lat: -6.7494, lng: 111.0379 },
-  { name: 'Rembang', province: 'Jawa Tengah', lat: -6.7063, lng: 111.3431 },
-  { name: 'Bandung', province: 'Jawa Barat', lat: -6.9175, lng: 107.6191 },
   { name: 'Jakarta', province: 'DKI Jakarta', lat: -6.2088, lng: 106.8456 },
+  { name: 'Bandung', province: 'Jawa Barat', lat: -6.9175, lng: 107.6191 },
   { name: 'Tangerang', province: 'Banten', lat: -6.1783, lng: 106.6319 },
   { name: 'Bekasi', province: 'Jawa Barat', lat: -6.2383, lng: 106.9756 },
   { name: 'Depok', province: 'Jawa Barat', lat: -6.4025, lng: 106.7942 },
