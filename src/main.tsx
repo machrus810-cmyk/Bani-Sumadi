@@ -2,12 +2,11 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
-import { registerSW } from 'virtual:pwa-register';
+import { initAutoUpdate } from './autoUpdate';
 
-// Daftarkan Service Worker PWA agar notifikasi & caching berjalan di background
-if ('serviceWorker' in navigator) {
-  registerSW({ immediate: true });
-}
+// Inisialisasi auto-update otomatis: mendeteksi rilis/publish baru
+// dan memperbarui aplikasi secara seamless tanpa refresh manual oleh pengguna
+initAutoUpdate();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

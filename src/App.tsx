@@ -31,6 +31,7 @@ import ImageCropperModal from './ImageCropperModal';
 import { PWAInstallButton } from './PWAInstallButton';
 import { OfflineIndicator } from './OfflineIndicator';
 import { SplashScreen } from './SplashScreen';
+import { PrayerTimesWidget } from './PrayerTimesWidget';
 import { toBlob, toJpeg } from 'html-to-image';
 import {
   playNotificationChime,
@@ -1725,6 +1726,9 @@ function DashboardTab({
     <div className="space-y-5 pb-6">
       {/* PWA INSTALL BANNER */}
       <PWAInstallButton variant="banner" />
+
+      {/* JADWAL WAKTU SHOLAT DENGAN DETEKSI GPS & NOTIFIKASI */}
+      <PrayerTimesWidget showToast={showToast} />
 
       {/* KARTU INTERAKTIF: SALDO KAS & AGENDA */}
       <div className="grid grid-cols-2 gap-3">

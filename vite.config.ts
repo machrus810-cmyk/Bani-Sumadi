@@ -1,14 +1,51 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig} from 'vite';
+import {defineConfig, Plugin} from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+
+const buildTimestamp = Date.now();
+
+// Plugin untuk menghasilkan version.json dinamis setiap kali build / server berjalan
+function autoVersionPlugin(timestamp: number): Plugin {
+  return {
+    name: 'auto-version-plugin',
+    configureServer(server) {
+      server.middlewares.use('/version.json', (req, res) => {
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+        res.end(JSON.stringify({ 
+          buildTime: timestamp, 
+          version: `1.0.${timestamp}`,
+          updatedAt: new Date(timestamp).toISOString()
+        }));
+      });
+    },
+    generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'version.json',
+        source: JSON.stringify({ 
+          buildTime: timestamp, 
+          version: `1.0.${timestamp}`,
+          updatedAt: new Date(timestamp).toISOString()
+        })
+      });
+    }
+  };
+}
 
 export default defineConfig(() => {
   return {
+    define: {
+      __APP_BUILD_TIME__: JSON.stringify(buildTimestamp),
+    },
     plugins: [
       react(),
       tailwindcss(),
+      autoVersionPlugin(buildTimestamp),
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icon.svg', 'pwa-192x192.png', 'pwa-512x512.png', 'logo.jpg', 'notification.wav', 'notification.mp3'],
@@ -44,7 +81,12 @@ export default defineConfig(() => {
           ],
         },
         workbox: {
+          skipWaiting: true,
+          clientsClaim: true,
+          cleanupOutdatedCaches: true,
+          maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,mp3,wav}'],
+          globIgnores: ['**/version.json'],
           importScripts: ['/sw-alarm.js'],
           runtimeCaching: [
             {
@@ -99,7 +141,7 @@ export default defineConfig(() => {
     ],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve('.'),
       },
     },
     server: {

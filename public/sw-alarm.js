@@ -12,8 +12,51 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
-// Cache atau memori untuk daftar agenda yang dijadwalkan
+// Cache atau memori untuk daftar agenda dan jadwal sholat yang dijadwalkan
 let scheduledAgendas = [];
+let scheduledPrayers = [];
+
+// Fungsi untuk mengecek waktu sholat yang tiba
+function checkDuePrayers() {
+  const now = Date.now();
+  if (!Array.isArray(scheduledPrayers) || scheduledPrayers.length === 0) return;
+
+  scheduledPrayers.forEach((item) => {
+    if (!item || !item.timestamp) return;
+
+    // Cek jika waktu sholat tiba (toleransi 10 menit)
+    const diff = now - item.timestamp;
+    const isDue = diff >= 0 && diff < 10 * 60 * 1000;
+
+    if (isDue && !item.fired) {
+      item.fired = true;
+
+      const title = `🕌 Waktu Sholat ${item.name} - ${item.cityName || 'Sekitarnya'}`;
+      const body = `Telah masuk waktu sholat ${item.name} (${item.timeStr || ''}). Mari tunaikan ibadah sholat tepat waktu.`;
+
+      self.registration.showNotification(title, {
+        body,
+        icon: '/pwa-192x192.png',
+        badge: '/pwa-192x192.png',
+        vibrate: [600, 200, 600, 200, 1000],
+        tag: `prayer-due-${item.name}-${new Date().toDateString()}`,
+        requireInteraction: true,
+        renotify: true,
+        silent: false,
+        sound: '/notification.mp3',
+        data: {
+          prayerName: item.name,
+          url: '/?tab=dash&prayerAlarm=1',
+          time: now
+        },
+        actions: [
+          { action: 'open', title: '🕌 Buka Jadwal Sholat' },
+          { action: 'dismiss', title: 'Tutup' }
+        ]
+      });
+    }
+  });
+}
 
 // Fungsi untuk mengecek agenda yang waktunya sudah tiba
 function checkDueAgendas() {
@@ -58,8 +101,11 @@ function checkDueAgendas() {
   });
 }
 
-// Cek berkala setiap 30 detik saat Service Worker aktif
-setInterval(checkDueAgendas, 30000);
+// Cek berkala setiap 25 detik saat Service Worker aktif
+setInterval(() => {
+  checkDueAgendas();
+  checkDuePrayers();
+}, 25000);
 
 // Menerima pesan sinkronisasi agenda dari aplikasi utama
 self.addEventListener('message', (event) => {
@@ -68,6 +114,11 @@ self.addEventListener('message', (event) => {
   if (event.data.type === 'SYNC_SCHEDULED_AGENDAS') {
     scheduledAgendas = event.data.agendas || [];
     checkDueAgendas();
+  }
+
+  if (event.data.type === 'SYNC_SCHEDULED_PRAYERS') {
+    scheduledPrayers = event.data.prayers || [];
+    checkDuePrayers();
   }
 
   if (event.data.type === 'TEST_ALARM_NOTIFICATION') {
