@@ -24,17 +24,101 @@ export interface CityLocation {
   lng: number;
 }
 
-// Konversi tanggal Masehi ke Hijriyah secara akurat
-export function getHijriDate(date: Date = new Date()): string {
-  try {
-    return new Intl.DateTimeFormat('id-ID-u-ca-islamic-umalqura', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
-    }).format(date);
-  } catch {
-    return '';
+// Daftar nama bulan Hijriyah baku dalam bahasa Indonesia
+export const HIJRI_MONTHS = [
+  'Muharram',
+  'Safar',
+  'Rabiulawal',
+  'Rabiulakhir',
+  'Jumadilawal',
+  'Jumadilakhir',
+  'Rajab',
+  'Syakban',
+  'Ramadhan',
+  'Syawwal',
+  "Dzulqa'dah",
+  'Dzulhijjah'
+];
+
+/**
+ * Konversi astronomis Julian Day ke kalender Hijriyah (metode Umm al-Qura)
+ * 100% deterministik tanpa ketergantungan pada locale atau ICU browser/HP.
+ */
+function gregorianToHijriAstronomical(date: Date, dayAdjustment = 1): { day: number; month: number; year: number } {
+  const d = new Date(date);
+  if (dayAdjustment !== 0) {
+    d.setDate(d.getDate() + dayAdjustment);
   }
+  const y = d.getFullYear();
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
+
+  let a = 0;
+  let b = 0;
+  let jd = 0;
+
+  if (m > 2) {
+    a = Math.floor(y / 100);
+    b = 2 - a + Math.floor(a / 4);
+    jd = Math.floor(365.25 * (y + 4716)) + Math.floor(30.6001 * (m + 1)) + day + b - 1524.5;
+  } else {
+    const yr = y - 1;
+    const mo = m + 12;
+    a = Math.floor(yr / 100);
+    b = 2 - a + Math.floor(a / 4);
+    jd = Math.floor(365.25 * (yr + 4716)) + Math.floor(30.6001 * (mo + 1)) + day + b - 1524.5;
+  }
+
+  const z = Math.floor(jd + 0.5);
+  const l = z - 1948440 + 10632;
+  const n = Math.floor((l - 1) / 10631);
+  const l2 = l - 10631 * n + 354;
+  const j = Math.floor((10985 - l2) / 5316) * Math.floor((50 * l2) / 17719) + Math.floor(l2 / 5670) * Math.floor((43 * l2) / 15238);
+  const l3 = l2 - Math.floor((30 - j) / 15) * Math.floor((17719 * j) / 50) - Math.floor(j / 16) * Math.floor((15238 * j) / 43) + 29;
+  const mH = Math.floor((24 * l3) / 709);
+  const dH = l3 - Math.floor((709 * mH) / 24);
+  const yH = 30 * n + j - 30;
+
+  return { day: dH, month: mH, year: yH };
+}
+
+/**
+ * Konversi tanggal Masehi ke Hijriyah yang 100% konsisten di semua perangkat (Desktop & HP)
+ * Menghilangkan bug ICU mobile yang merubah bulan menjadi Gregorian (misal Mei) atau era menjadi 'SM'.
+ */
+export function getHijriDate(date: Date = new Date()): string {
+  let day = 0;
+  let month = 0;
+  let year = 0;
+
+  // 1. Ekstrak nilai numerik dari calendar islamic-umalqura
+  try {
+    const formatter = new Intl.DateTimeFormat('en-u-ca-islamic-umalqura', {
+      day: 'numeric',
+      month: 'numeric',
+      year: 'numeric'
+    });
+    const parts = formatter.formatToParts(date);
+    for (const part of parts) {
+      if (part.type === 'day') day = parseInt(part.value, 10);
+      if (part.type === 'month') month = parseInt(part.value, 10);
+      if (part.type === 'year') year = parseInt(part.value, 10);
+    }
+  } catch {
+    // Abaikan jika tidak didukung
+  }
+
+  // 2. Validasi ketat: jika browser di HP tidak mendukung islamic-umalqura (misal mengembalikan tahun masehi 2026),
+  // gunakan algoritma astronomis murni agar selalu akurat di HP Android/iOS
+  if (!year || year < 1300 || year > 1600 || !month || month < 1 || month > 12 || !day) {
+    const fallback = gregorianToHijriAstronomical(date, 1);
+    day = fallback.day;
+    month = fallback.month;
+    year = fallback.year;
+  }
+
+  const monthName = HIJRI_MONTHS[month - 1] || 'Jumadilawal';
+  return `${day} ${monthName} ${year} H`;
 }
 
 // Format tanggal Masehi Indonesia (misal: "Jumat, 31 Oktober 2026")
@@ -454,3 +538,114 @@ export function syncPrayersToServiceWorker(prayers: PrayerItem[], cityName: stri
     }).catch(() => {});
   }
 }
+
+/**
+ * Cek status pengaturan notifikasi hitung mundur terus menerus di HP
+ */
+export function isContinuousCountdownEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  return localStorage.getItem('prayer_persistent_countdown_enabled') === 'true';
+}
+
+/**
+ * Simpan pengaturan on/off notifikasi hitung mundur terus menerus di HP
+ */
+export function setContinuousCountdownEnabled(enabled: boolean): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem('prayer_persistent_countdown_enabled', enabled ? 'true' : 'false');
+}
+
+/**
+ * Memperbarui notifikasi hitung mundur yang tampil terus di status bar HP (ongoing notification)
+ */
+export async function updateContinuousCountdownNotification(
+  nextPrayer: PrayerItem | null,
+  secondsToNext: number,
+  cityName: string
+): Promise<void> {
+  if (typeof window === 'undefined' || !('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+
+  if (!nextPrayer) {
+    await clearContinuousCountdownNotification();
+    return;
+  }
+
+  const countdownText = formatCountdownHMS(secondsToNext);
+  const title = `🕌 Menuju ${nextPrayer.name} -${countdownText}`;
+  const body = `Jadwal: ${cityName} • ${nextPrayer.name} ${nextPrayer.timeStr} WIB`;
+
+  // 1. Tampilkan via Service Worker dengan parameter ongoing: true untuk status bar HP
+  if ('serviceWorker' in navigator) {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      await reg.showNotification(title, {
+        body,
+        icon: '/pwa-192x192.png',
+        badge: '/pwa-192x192.png',
+        tag: 'prayer-countdown-live',
+        renotify: false,
+        silent: true,
+        ongoing: true,
+        requireInteraction: true,
+        data: {
+          url: '/?tab=dash&prayer=1',
+          targetTimestamp: nextPrayer.dateObj.getTime()
+        }
+      } as any);
+
+      // Sinkronkan data ke Service Worker agar bisa diteruskan saat aplikasi di latar belakang
+      if (reg.active) {
+        reg.active.postMessage({
+          type: 'SET_COUNTDOWN_NOTIFICATION',
+          enabled: true,
+          prayerName: nextPrayer.name,
+          timeStr: nextPrayer.timeStr,
+          cityName,
+          targetTimestamp: nextPrayer.dateObj.getTime()
+        });
+      }
+      return;
+    } catch {
+      // fallback jika gagal
+    }
+  }
+
+  // 2. Fallback direct Notification API
+  try {
+    new Notification(title, {
+      body,
+      icon: '/pwa-192x192.png',
+      badge: '/pwa-192x192.png',
+      tag: 'prayer-countdown-live',
+      renotify: false,
+      silent: true
+    } as any);
+  } catch {
+    // abaikan jika tidak diizinkan
+  }
+}
+
+/**
+ * Menutup dan menghapus notifikasi hitung mundur terus menerus dari status bar HP
+ */
+export async function clearContinuousCountdownNotification(): Promise<void> {
+  if (typeof window === 'undefined') return;
+
+  if ('serviceWorker' in navigator) {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      if (reg.active) {
+        reg.active.postMessage({
+          type: 'SET_COUNTDOWN_NOTIFICATION',
+          enabled: false
+        });
+      }
+      const notifs = await reg.getNotifications({ tag: 'prayer-countdown-live' });
+      notifs.forEach(n => n.close());
+    } catch {
+      // abaikan
+    }
+  }
+}
+

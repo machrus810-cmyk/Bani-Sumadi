@@ -15,6 +15,36 @@ self.addEventListener('activate', (event) => {
 // Cache atau memori untuk daftar agenda dan jadwal sholat yang dijadwalkan
 let scheduledAgendas = [];
 let scheduledPrayers = [];
+let countdownNotificationConfig = null;
+
+// Fungsi untuk memperbarui notifikasi hitung mundur sholat terus menerus di status bar HP
+function updateCountdownNotification() {
+  if (!countdownNotificationConfig || !countdownNotificationConfig.enabled) return;
+  const now = Date.now();
+  const diffMs = countdownNotificationConfig.targetTimestamp - now;
+  if (diffMs <= 0) return;
+
+  const diffSec = Math.floor(diffMs / 1000);
+  const h = String(Math.floor(diffSec / 3600)).padStart(2, '0');
+  const m = String(Math.floor((diffSec % 3600) / 60)).padStart(2, '0');
+  const s = String(diffSec % 60).padStart(2, '0');
+  const countdownText = `-${h}:${m}:${s}`;
+
+  self.registration.showNotification(`🕌 Menuju ${countdownNotificationConfig.prayerName} ${countdownText}`, {
+    body: `Jadwal ${countdownNotificationConfig.cityName} • ${countdownNotificationConfig.prayerName} pukul ${countdownNotificationConfig.timeStr} WIB`,
+    icon: '/pwa-192x192.png',
+    badge: '/pwa-192x192.png',
+    tag: 'prayer-countdown-live',
+    renotify: false,
+    silent: true,
+    ongoing: true,
+    requireInteraction: true,
+    data: {
+      url: '/?tab=dash&prayer=1',
+      targetTimestamp: countdownNotificationConfig.targetTimestamp
+    }
+  });
+}
 
 // Fungsi untuk mengecek waktu sholat yang tiba
 function checkDuePrayers() {
@@ -101,13 +131,14 @@ function checkDueAgendas() {
   });
 }
 
-// Cek berkala setiap 25 detik saat Service Worker aktif
+// Cek berkala setiap 20 detik saat Service Worker aktif
 setInterval(() => {
   checkDueAgendas();
   checkDuePrayers();
-}, 25000);
+  updateCountdownNotification();
+}, 20000);
 
-// Menerima pesan sinkronisasi agenda dari aplikasi utama
+// Menerima pesan sinkronisasi agenda dan hitung mundur dari aplikasi utama
 self.addEventListener('message', (event) => {
   if (!event.data) return;
 
@@ -119,6 +150,27 @@ self.addEventListener('message', (event) => {
   if (event.data.type === 'SYNC_SCHEDULED_PRAYERS') {
     scheduledPrayers = event.data.prayers || [];
     checkDuePrayers();
+  }
+
+  // Notifikasi terus-menerus hitung mundur sholat di notifikasi HP
+  if (event.data.type === 'SET_COUNTDOWN_NOTIFICATION') {
+    if (event.data.enabled && event.data.targetTimestamp) {
+      countdownNotificationConfig = {
+        enabled: true,
+        prayerName: event.data.prayerName,
+        timeStr: event.data.timeStr,
+        cityName: event.data.cityName,
+        targetTimestamp: event.data.targetTimestamp
+      };
+      updateCountdownNotification();
+    } else {
+      countdownNotificationConfig = null;
+      if (self.registration && self.registration.getNotifications) {
+        self.registration.getNotifications({ tag: 'prayer-countdown-live' }).then((notifs) => {
+          notifs.forEach(n => n.close());
+        }).catch(() => {});
+      }
+    }
   }
 
   if (event.data.type === 'TEST_ALARM_NOTIFICATION') {
