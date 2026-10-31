@@ -43,9 +43,16 @@ import {
   isContinuousCountdownEnabled,
   setContinuousCountdownEnabled,
   updateContinuousCountdownNotification,
-  clearContinuousCountdownNotification
+  clearContinuousCountdownNotification,
+  generateUpcomingPrayers
 } from './prayerTimes';
 import { requestNotificationPermission } from './audioNotification';
+import {
+  enableBackgroundCountdown,
+  updateBackgroundPrayer,
+  disableBackgroundCountdown,
+  isBackgroundCountdownActive
+} from './backgroundService';
 
 interface PrayerTimesWidgetProps {
   showToast?: (m: string, t?: 'success' | 'error') => void;
@@ -139,23 +146,41 @@ export const PrayerTimesWidget: React.FC<PrayerTimesWidgetProps> = ({ showToast 
     }
   }, [prayers, currentLocation.name, currentLocation.lat, currentLocation.lng]);
 
-  // Update Notifikasi Terus-Menerus di HP setiap beberapa detik jika diaktifkan
+  // Sinkronkan pembaruan target sholat ke Background Service & Service Worker
   useEffect(() => {
     if (!isContinuousNotifOn) {
+      if (isBackgroundCountdownActive()) {
+        disableBackgroundCountdown();
+      }
       clearContinuousCountdownNotification();
       return;
     }
 
-    // Perbarui notifikasi secara berkala
-    updateContinuousCountdownNotification(
-      nextPrayer, 
-      secondsToNext, 
-      currentLocation.name, 
-      currentLocation.lat, 
-      currentLocation.lng
-    );
+    if (nextPrayer) {
+      const upcoming = generateUpcomingPrayers(currentLocation.lat, currentLocation.lng, 7);
 
-    const notifTimer = setInterval(() => {
+      if (!isBackgroundCountdownActive()) {
+        enableBackgroundCountdown({
+          prayerName: nextPrayer.name,
+          timeStr: nextPrayer.timeStr,
+          cityName: currentLocation.name,
+          targetTimestamp: nextPrayer.dateObj.getTime(),
+          lat: currentLocation.lat,
+          lng: currentLocation.lng,
+          upcomingPrayers: upcoming
+        });
+      } else {
+        updateBackgroundPrayer({
+          prayerName: nextPrayer.name,
+          timeStr: nextPrayer.timeStr,
+          cityName: currentLocation.name,
+          targetTimestamp: nextPrayer.dateObj.getTime(),
+          lat: currentLocation.lat,
+          lng: currentLocation.lng,
+          upcomingPrayers: upcoming
+        });
+      }
+
       updateContinuousCountdownNotification(
         nextPrayer, 
         secondsToNext, 
@@ -163,10 +188,8 @@ export const PrayerTimesWidget: React.FC<PrayerTimesWidgetProps> = ({ showToast 
         currentLocation.lat, 
         currentLocation.lng
       );
-    }, 5000);
-
-    return () => clearInterval(notifTimer);
-  }, [isContinuousNotifOn, nextPrayer, secondsToNext, currentLocation.name, currentLocation.lat, currentLocation.lng]);
+    }
+  }, [isContinuousNotifOn, nextPrayer?.id, nextPrayer?.timeStr, currentLocation.name, currentLocation.lat, currentLocation.lng]);
 
   // Pantau apakah ada waktu sholat yang tepat masuk (toleransi 50 detik)
   useEffect(() => {
@@ -311,33 +334,48 @@ export const PrayerTimesWidget: React.FC<PrayerTimesWidgetProps> = ({ showToast 
     }
   };
 
-  // Toggle Notifikasi Terus-menerus di Status Bar HP
+  // Toggle Notifikasi Terus-menerus di Status Bar HP dengan Audio Keep-Alive Foreground Service
   const handleToggleContinuousNotification = async () => {
     if (!isContinuousNotifOn) {
-      // Coba minta izin notifikasi terlebih dahulu
+      // 1. Coba minta izin notifikasi terlebih dahulu
       const granted = await requestNotificationPermission();
       if (!granted && typeof Notification !== 'undefined' && Notification.permission === 'denied') {
         if (showToast) {
-          showToast('Izin notifikasi diblokir di browser HP. Izinkan melalui setelan situs.', 'error');
+          showToast('Izin notifikasi diblokir di browser HP. Izinkan notifikasi pada setelan situs browser.', 'error');
         }
         return;
       }
 
       setIsContinuousNotifOn(true);
       setContinuousCountdownEnabled(true);
-      await updateContinuousCountdownNotification(
-        nextPrayer, 
-        secondsToNext, 
-        currentLocation.name,
-        currentLocation.lat,
-        currentLocation.lng
-      );
+
+      if (nextPrayer) {
+        const upcoming = generateUpcomingPrayers(currentLocation.lat, currentLocation.lng, 7);
+        await enableBackgroundCountdown({
+          prayerName: nextPrayer.name,
+          timeStr: nextPrayer.timeStr,
+          cityName: currentLocation.name,
+          targetTimestamp: nextPrayer.dateObj.getTime(),
+          lat: currentLocation.lat,
+          lng: currentLocation.lng,
+          upcomingPrayers: upcoming
+        });
+        await updateContinuousCountdownNotification(
+          nextPrayer, 
+          secondsToNext, 
+          currentLocation.name,
+          currentLocation.lat,
+          currentLocation.lng
+        );
+      }
+
       if (showToast) {
-        showToast('📱 Notifikasi hitung mundur sholat aktif di status bar HP', 'success');
+        showToast('📱 Hitung mundur aktif di status bar HP & berjalan terus saat aplikasi ditutup!', 'success');
       }
     } else {
       setIsContinuousNotifOn(false);
       setContinuousCountdownEnabled(false);
+      await disableBackgroundCountdown();
       await clearContinuousCountdownNotification();
       if (showToast) {
         showToast('📱 Notifikasi hitung mundur di HP dinonaktifkan', 'success');
@@ -709,30 +747,66 @@ export const PrayerTimesWidget: React.FC<PrayerTimesWidgetProps> = ({ showToast 
               </button>
             </div>
             
-            <div className="text-xs text-gray-300 my-3 space-y-2.5 leading-relaxed">
-              <p>
-                Di beberapa HP (Xiaomi/Redmi, Samsung, Oppo, Vivo), sistem sering mematikan proses latar belakang secara paksa saat aplikasi ditutup.
-              </p>
-              
-              <div className="bg-slate-800/80 p-2.5 rounded-xl border border-slate-700/60 space-y-2">
-                <div className="font-bold text-amber-300 text-[11.5px]">Langkah Pengaturan HP:</div>
-                <div className="flex items-start gap-1.5 text-[11px]">
-                  <span className="font-bold text-teal-400">1.</span>
-                  <span><strong>Izin Notifikasi:</strong> Pastikan notifikasi browser diizinkan.</span>
+            <div className="text-xs text-gray-300 my-3 space-y-2.5 leading-relaxed max-h-[75vh] overflow-y-auto pr-1">
+              <div className="p-2.5 rounded-xl bg-teal-950/60 border border-teal-500/40 text-teal-200 text-[11.5px]">
+                <strong className="text-teal-300 block mb-1">⚡ Mesin Latar Belakang Aktif:</strong>
+                Fitur ini kini dilengkapi <em>Audio Keep-Alive</em> dan <em>Service Worker</em> agar hitung mundur tetap aktif dan alarm adzan tetap berbunyi saat layar HP terkunci atau saat Anda membuka aplikasi lain (WhatsApp, dll).
+              </div>
+
+              <div className="bg-slate-800/90 p-3 rounded-xl border border-slate-700/70 space-y-2.5">
+                <div className="font-bold text-amber-300 text-xs flex items-center gap-1.5">
+                  <Smartphone size={14} className="text-amber-400" />
+                  <span>Agar Tidak Dimatikan Sistem HP (Android):</span>
                 </div>
-                <div className="flex items-start gap-1.5 text-[11px]">
-                  <span className="font-bold text-teal-400">2.</span>
-                  <span><strong>Penghemat Baterai:</strong> Buka Info Aplikasi (App Info) Chrome/Browser di HP &gt; pilih <em>Penghemat Baterai</em> &gt; ubah ke <em>Tidak Ada Pembatasan (No Restrictions)</em>.</span>
+                
+                <div className="flex items-start gap-2 text-[11px]">
+                  <span className="font-bold text-teal-400 bg-teal-400/20 w-4 h-4 rounded-full flex items-center justify-center shrink-0 mt-0.5">1</span>
+                  <span><strong>Jangan Geser Hapus:</strong> Jangan swipe/tutup paksa tab aplikasi dari daftar aplikasi terakhir (Recent Apps), cukup tekan tombol <em>Home</em> saat keluar.</span>
                 </div>
-                <div className="flex items-start gap-1.5 text-[11px]">
-                  <span className="font-bold text-teal-400">3.</span>
-                  <span><strong>Mulai Otomatis:</strong> Di HP Xiaomi/Oppo/Vivo, aktifkan izin <em>Mulai Otomatis (Autostart)</em>.</span>
+
+                <div className="flex items-start gap-2 text-[11px]">
+                  <span className="font-bold text-teal-400 bg-teal-400/20 w-4 h-4 rounded-full flex items-center justify-center shrink-0 mt-0.5">2</span>
+                  <span><strong>Penghemat Baterai:</strong> Buka <em>Setelan HP &gt; Aplikasi &gt; Chrome/Browser &gt; Baterai</em> &gt; pilih <strong>"Tidak Dibatasi / No Restrictions"</strong> agar HP tidak mematikan timer sholat.</span>
+                </div>
+
+                <div className="flex items-start gap-2 text-[11px]">
+                  <span className="font-bold text-teal-400 bg-teal-400/20 w-4 h-4 rounded-full flex items-center justify-center shrink-0 mt-0.5">3</span>
+                  <span><strong>Kunci Aplikasi (Opsional):</strong> Pada HP Xiaomi, Oppo, Vivo, tahan ikon aplikasi di Recent Apps lalu pilih <em>Kunci (Gembok)</em> agar tidak terhapus saat membersihkan RAM.</span>
                 </div>
               </div>
-              
-              <p className="text-[11px] text-gray-400 italic">
-                *Aplikasi ini telah dilengkapi database Service Worker offline dan otomatis berganti ke waktu sholat berikutnya saat waktu tiba.
-              </p>
+
+              <div className="pt-1">
+                <button
+                  onClick={async () => {
+                    const granted = await requestNotificationPermission();
+                    if (granted) {
+                      if (nextPrayer) {
+                        const upcoming = generateUpcomingPrayers(currentLocation.lat, currentLocation.lng, 7);
+                        await enableBackgroundCountdown({
+                          prayerName: nextPrayer.name,
+                          timeStr: nextPrayer.timeStr,
+                          cityName: currentLocation.name,
+                          targetTimestamp: nextPrayer.dateObj.getTime(),
+                          lat: currentLocation.lat,
+                          lng: currentLocation.lng,
+                          upcomingPrayers: upcoming
+                        });
+                        setIsContinuousNotifOn(true);
+                        setContinuousCountdownEnabled(true);
+                      }
+                      if (showToast) {
+                        showToast('✅ Notifikasi hitung mundur telah diperbarui di status bar HP Anda!', 'success');
+                      }
+                    } else if (showToast) {
+                      showToast('Izin notifikasi belum diberikan di browser HP.', 'error');
+                    }
+                  }}
+                  className="w-full bg-teal-600 hover:bg-teal-500 text-white font-bold py-2 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                >
+                  <Sparkles size={14} className="text-amber-300" />
+                  <span>Kirim Notifikasi HP Sekarang</span>
+                </button>
+              </div>
             </div>
 
             <button
