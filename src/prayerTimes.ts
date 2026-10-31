@@ -509,9 +509,66 @@ export function sendPrayerNotification(prayerName: string, cityName: string): vo
 }
 
 /**
+ * Menghasilkan daftar waktu sholat fardhu berurutan untuk beberapa hari ke depan
+ * Digunakan oleh Service Worker untuk berpindah otomatis saat aplikasi ditutup
+ */
+export function generateUpcomingPrayers(lat: number, lng: number, daysAhead = 7): Array<{
+  id: string;
+  name: string;
+  timeStr: string;
+  timestamp: number;
+}> {
+  const coordinates = new Coordinates(lat, lng);
+  const params = CalculationMethod.Singapore();
+  params.fajrAngle = 20;
+  params.ishaAngle = 18;
+  params.madhab = Madhab.Shafi;
+  params.adjustments = {
+    fajr: 2,
+    sunrise: -2,
+    dhuhr: 2,
+    asr: 2,
+    maghrib: 2,
+    isha: 2
+  };
+
+  const results: Array<{ id: string; name: string; timeStr: string; timestamp: number }> = [];
+  const now = new Date();
+
+  for (let i = 0; i < daysAhead; i++) {
+    const targetDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+    const pt = new PrayerTimes(coordinates, targetDate, params);
+
+    const dayItems = [
+      { id: 'subuh', name: 'Subuh', date: pt.fajr },
+      { id: 'dhuhur', name: 'Dhuhur', date: pt.dhuhr },
+      { id: 'ashar', name: 'Ashar', date: pt.asr },
+      { id: 'maghrib', name: 'Maghrib', date: pt.maghrib },
+      { id: 'isya', name: "Isya'", date: pt.isha }
+    ];
+
+    dayItems.forEach(item => {
+      results.push({
+        id: item.id,
+        name: item.name,
+        timeStr: formatTimeHM(item.date),
+        timestamp: item.date.getTime()
+      });
+    });
+  }
+
+  return results.sort((a, b) => a.timestamp - b.timestamp);
+}
+
+/**
  * Sinkronisasi jadwal sholat ke Service Worker agar tetap berdering saat app di background
  */
-export function syncPrayersToServiceWorker(prayers: PrayerItem[], cityName: string): void {
+export function syncPrayersToServiceWorker(
+  prayers: PrayerItem[], 
+  cityName: string,
+  lat?: number,
+  lng?: number
+): void {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
 
   const prayerData = prayers.map(p => ({
@@ -522,18 +579,26 @@ export function syncPrayersToServiceWorker(prayers: PrayerItem[], cityName: stri
     fired: p.isPassed
   }));
 
+  let upcomingPrayers: Array<{ id: string; name: string; timeStr: string; timestamp: number }> = [];
+  if (typeof lat === 'number' && typeof lng === 'number') {
+    upcomingPrayers = generateUpcomingPrayers(lat, lng, 7);
+  }
+
+  const payload = {
+    type: 'SYNC_SCHEDULED_PRAYERS',
+    prayers: prayerData,
+    upcomingPrayers,
+    cityName,
+    lat,
+    lng
+  };
+
   if (navigator.serviceWorker.controller) {
-    navigator.serviceWorker.controller.postMessage({
-      type: 'SYNC_SCHEDULED_PRAYERS',
-      prayers: prayerData
-    });
+    navigator.serviceWorker.controller.postMessage(payload);
   } else {
     navigator.serviceWorker.ready.then(reg => {
       if (reg.active) {
-        reg.active.postMessage({
-          type: 'SYNC_SCHEDULED_PRAYERS',
-          prayers: prayerData
-        });
+        reg.active.postMessage(payload);
       }
     }).catch(() => {});
   }
@@ -557,11 +622,14 @@ export function setContinuousCountdownEnabled(enabled: boolean): void {
 
 /**
  * Memperbarui notifikasi hitung mundur yang tampil terus di status bar HP (ongoing notification)
+ * Mendukung persistensi IndexedDB & auto-advance saat aplikasi ditutup
  */
 export async function updateContinuousCountdownNotification(
   nextPrayer: PrayerItem | null,
   secondsToNext: number,
-  cityName: string
+  cityName: string,
+  lat?: number,
+  lng?: number
 ): Promise<void> {
   if (typeof window === 'undefined' || !('Notification' in window)) return;
   if (Notification.permission !== 'granted') return;
@@ -572,8 +640,13 @@ export async function updateContinuousCountdownNotification(
   }
 
   const countdownText = formatCountdownHMS(secondsToNext);
-  const title = `🕌 Menuju ${nextPrayer.name} -${countdownText}`;
-  const body = `Jadwal: ${cityName} • ${nextPrayer.name} ${nextPrayer.timeStr} WIB`;
+  const title = `🕌 Menuju ${nextPrayer.name} ${countdownText}`;
+  const body = `Jadwal ${cityName} • Sholat ${nextPrayer.name} pukul ${nextPrayer.timeStr} WIB`;
+
+  // Hitung jadwal 7 hari ke depan jika koordinat tersedia
+  const upcomingPrayers = (typeof lat === 'number' && typeof lng === 'number')
+    ? generateUpcomingPrayers(lat, lng, 7)
+    : [];
 
   // 1. Tampilkan via Service Worker dengan parameter ongoing: true untuk status bar HP
   if ('serviceWorker' in navigator) {
@@ -591,23 +664,70 @@ export async function updateContinuousCountdownNotification(
         data: {
           url: '/?tab=dash&prayer=1',
           targetTimestamp: nextPrayer.dateObj.getTime()
-        }
+        },
+        actions: [
+          { action: 'open_prayer', title: '🕌 Buka Jadwal' },
+          { action: 'stop_countdown', title: 'Matikan Notif' }
+        ]
       } as any);
 
-      // Sinkronkan data ke Service Worker agar bisa diteruskan saat aplikasi di latar belakang
+      // Sinkronkan data ke Service Worker agar terus berjalan di latar belakang setelah aplikasi ditutup
+      const msgPayload = {
+        type: 'SET_COUNTDOWN_NOTIFICATION',
+        enabled: true,
+        prayerName: nextPrayer.name,
+        timeStr: nextPrayer.timeStr,
+        cityName,
+        targetTimestamp: nextPrayer.dateObj.getTime(),
+        lat,
+        lng,
+        upcomingPrayers
+      };
+
       if (reg.active) {
-        reg.active.postMessage({
-          type: 'SET_COUNTDOWN_NOTIFICATION',
-          enabled: true,
-          prayerName: nextPrayer.name,
-          timeStr: nextPrayer.timeStr,
-          cityName,
-          targetTimestamp: nextPrayer.dateObj.getTime()
-        });
+        reg.active.postMessage(msgPayload);
+      } else if (navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage(msgPayload);
       }
+
+      // Daftarkan Periodic Background Sync jika browser HP mendukung
+      try {
+        if ('periodicSync' in reg) {
+          // @ts-ignore
+          await reg.periodicSync.register('prayer-countdown-sync', {
+            minInterval: 60 * 1000 // 1 menit
+          });
+        }
+      } catch {
+        // Periodic sync butuh instalasi PWA di beberapa versi Chrome
+      }
+
+      // Jadwalkan Notification Timestamp Trigger pada Chromium Android jika didukung
+      try {
+        // @ts-ignore
+        if ('Notification' in window && 'showTrigger' in Notification.prototype && window.TimestampTrigger) {
+          // @ts-ignore
+          const trigger = new window.TimestampTrigger(nextPrayer.dateObj.getTime());
+          await reg.showNotification(`🕌 Masuk Waktu Sholat ${nextPrayer.name}!`, {
+            body: `Telah masuk waktu sholat ${nextPrayer.name} (${nextPrayer.timeStr} WIB) untuk ${cityName}. Mari tunaikan sholat.`,
+            icon: '/pwa-192x192.png',
+            badge: '/pwa-192x192.png',
+            vibrate: [600, 200, 600, 200, 1000],
+            tag: `prayer-trigger-${nextPrayer.id}-${nextPrayer.dateObj.getTime()}`,
+            showTrigger: trigger,
+            requireInteraction: true,
+            renotify: true,
+            sound: '/notification.mp3',
+            data: { url: '/?tab=dash&prayerAlarm=1' }
+          } as any);
+        }
+      } catch {
+        // Abaikan jika tidak didukung
+      }
+
       return;
     } catch {
-      // fallback jika gagal
+      // fallback jika Service Worker error
     }
   }
 
@@ -648,4 +768,5 @@ export async function clearContinuousCountdownNotification(): Promise<void> {
     }
   }
 }
+
 
