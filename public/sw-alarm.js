@@ -220,7 +220,6 @@ async function updateCountdownNotification() {
       silent: true,
       ongoing: true, // Berjalan terus di status bar HP tanpa swipe hilang tidak sengaja
       requireInteraction: true,
-      timestamp: countdownNotificationConfig.targetTimestamp,
       data: {
         url: '/?tab=dash&prayer=1',
         targetTimestamp: countdownNotificationConfig.targetTimestamp
@@ -296,40 +295,6 @@ function checkDueAgendas() {
   });
 }
 
-// Jadwalkan Notification TimestampTrigger untuk sholat-sholat mendatang jika didukung
-async function schedulePrayerTriggers(upcomingPrayers, cityName) {
-  if (!Array.isArray(upcomingPrayers) || upcomingPrayers.length === 0) return;
-  // Cek apakah browser Android mendukung TimestampTrigger
-  // @ts-ignore
-  if (!('showTrigger' in Notification.prototype) || typeof self.TimestampTrigger === 'undefined') {
-    return;
-  }
-
-  const now = Date.now();
-  for (const item of upcomingPrayers.slice(0, 10)) {
-    if (item && item.timestamp && item.timestamp > now) {
-      try {
-        // @ts-ignore
-        const trigger = new self.TimestampTrigger(item.timestamp);
-        await self.registration.showNotification(`🕌 Masuk Waktu Sholat ${item.name}!`, {
-          body: `Telah masuk waktu sholat ${item.name} (${item.timeStr} WIB) untuk ${cityName || 'wilayah Anda'}. Mari tunaikan sholat.`,
-          icon: '/pwa-192x192.png',
-          badge: '/pwa-192x192.png',
-          vibrate: [600, 200, 600, 200, 1000],
-          tag: `prayer-trigger-${item.id}-${item.timestamp}`,
-          showTrigger: trigger,
-          requireInteraction: true,
-          renotify: true,
-          sound: '/notification.mp3',
-          data: { url: '/?tab=dash&prayerAlarm=1' }
-        });
-      } catch {
-        // abaikan jika browser membatasi kuota trigger
-      }
-    }
-  }
-}
-
 // Siklus loop pembaruan background
 async function backgroundTick() {
   if (!isInitialized) {
@@ -343,82 +308,73 @@ async function backgroundTick() {
 // Timer berkala saat Service Worker hidup
 setInterval(() => {
   backgroundTick().catch(() => {});
-}, 10000);
+}, 20000);
 
 // ----------------------------------------------------
 // PENERIMA PESAN DARI APLIKASI UTAMA (REACT)
 // ----------------------------------------------------
-self.addEventListener('message', (event) => {
+self.addEventListener('message', async (event) => {
   if (!event.data) return;
 
-  event.waitUntil((async () => {
-    // 1. Sinkronisasi Agenda Keluarga
-    if (event.data.type === 'SYNC_SCHEDULED_AGENDAS') {
-      scheduledAgendas = event.data.agendas || [];
-      await dbSet('scheduled_agendas', scheduledAgendas);
-      checkDueAgendas();
-    }
+  // 1. Sinkronisasi Agenda Keluarga
+  if (event.data.type === 'SYNC_SCHEDULED_AGENDAS') {
+    scheduledAgendas = event.data.agendas || [];
+    await dbSet('scheduled_agendas', scheduledAgendas);
+    checkDueAgendas();
+  }
 
-    // 2. Sinkronisasi Jadwal Sholat Harian
-    if (event.data.type === 'SYNC_SCHEDULED_PRAYERS') {
-      scheduledPrayers = event.data.prayers || [];
-      await dbSet('scheduled_prayers', scheduledPrayers);
-      if (Array.isArray(event.data.upcomingPrayers)) {
-        await schedulePrayerTriggers(event.data.upcomingPrayers, event.data.cityName);
-      }
-      checkDuePrayers();
-    }
+  // 2. Sinkronisasi Jadwal Sholat Harian
+  if (event.data.type === 'SYNC_SCHEDULED_PRAYERS') {
+    scheduledPrayers = event.data.prayers || [];
+    await dbSet('scheduled_prayers', scheduledPrayers);
+    checkDuePrayers();
+  }
 
-    // 3. Konfigurasi Notifikasi Hitung Mundur Terus-Menerus di Status Bar HP
-    if (event.data.type === 'SET_COUNTDOWN_NOTIFICATION') {
-      if (event.data.enabled && event.data.targetTimestamp) {
-        countdownNotificationConfig = {
-          enabled: true,
-          prayerName: event.data.prayerName,
-          timeStr: event.data.timeStr,
-          cityName: event.data.cityName,
-          targetTimestamp: event.data.targetTimestamp,
-          lat: event.data.lat,
-          lng: event.data.lng,
-          upcomingPrayers: event.data.upcomingPrayers || []
-        };
+  // 3. Konfigurasi Notifikasi Hitung Mundur Terus-Menerus di Status Bar HP
+  if (event.data.type === 'SET_COUNTDOWN_NOTIFICATION') {
+    if (event.data.enabled && event.data.targetTimestamp) {
+      countdownNotificationConfig = {
+        enabled: true,
+        prayerName: event.data.prayerName,
+        timeStr: event.data.timeStr,
+        cityName: event.data.cityName,
+        targetTimestamp: event.data.targetTimestamp,
+        lat: event.data.lat,
+        lng: event.data.lng,
+        upcomingPrayers: event.data.upcomingPrayers || []
+      };
 
-        // Simpan ke IndexedDB agar tidak hilang saat aplikasi ditutup
-        await dbSet('countdown_config', countdownNotificationConfig);
-        await updateCountdownNotification();
+      // Simpan ke IndexedDB agar tidak hilang saat aplikasi ditutup
+      await dbSet('countdown_config', countdownNotificationConfig);
+      await updateCountdownNotification();
+    } else {
+      countdownNotificationConfig = null;
+      await dbDelete('countdown_config');
 
-        if (Array.isArray(event.data.upcomingPrayers)) {
-          await schedulePrayerTriggers(event.data.upcomingPrayers, event.data.cityName);
-        }
-      } else {
-        countdownNotificationConfig = null;
-        await dbDelete('countdown_config');
-
-        if (self.registration && self.registration.getNotifications) {
-          try {
-            const notifs = await self.registration.getNotifications({ tag: 'prayer-countdown-live' });
-            notifs.forEach(n => n.close());
-          } catch {
-            // ignore
-          }
+      if (self.registration && self.registration.getNotifications) {
+        try {
+          const notifs = await self.registration.getNotifications({ tag: 'prayer-countdown-live' });
+          notifs.forEach(n => n.close());
+        } catch {
+          // ignore
         }
       }
     }
+  }
 
-    // 4. Tes Alarm & Suara
-    if (event.data.type === 'TEST_ALARM_NOTIFICATION') {
-      await self.registration.showNotification('🔔 Tes Suara & Notifikasi Agenda', {
-        body: 'Notifikasi otomatis berfungsi! Suara dan getaran akan berbunyi saat agenda tiba meskipun aplikasi ditutup.',
-        icon: '/pwa-192x192.png',
-        badge: '/pwa-192x192.png',
-        vibrate: [400, 150, 400, 150, 600],
-        sound: '/notification.mp3',
-        tag: 'test-alarm',
-        requireInteraction: true,
-        data: { url: '/?test=1' }
-      });
-    }
-  })());
+  // 4. Tes Alarm & Suara
+  if (event.data.type === 'TEST_ALARM_NOTIFICATION') {
+    self.registration.showNotification('🔔 Tes Suara & Notifikasi Agenda', {
+      body: 'Notifikasi otomatis berfungsi! Suara dan getaran akan berbunyi saat agenda tiba meskipun aplikasi ditutup.',
+      icon: '/pwa-192x192.png',
+      badge: '/pwa-192x192.png',
+      vibrate: [400, 150, 400, 150, 600],
+      sound: '/notification.mp3',
+      tag: 'test-alarm',
+      requireInteraction: true,
+      data: { url: '/?test=1' }
+    });
+  }
 });
 
 // ----------------------------------------------------
