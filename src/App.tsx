@@ -31,7 +31,6 @@ import ImageCropperModal from './ImageCropperModal';
 import { PWAInstallButton } from './PWAInstallButton';
 import { OfflineIndicator } from './OfflineIndicator';
 import { SplashScreen } from './SplashScreen';
-import { PrayerTimesWidget } from './PrayerTimesWidget';
 import { toBlob, toJpeg } from 'html-to-image';
 import {
   playNotificationChime,
@@ -1726,9 +1725,6 @@ function DashboardTab({
     <div className="space-y-5 pb-6">
       {/* PWA INSTALL BANNER */}
       <PWAInstallButton variant="banner" />
-
-      {/* JADWAL WAKTU SHOLAT DENGAN DETEKSI GPS & NOTIFIKASI */}
-      <PrayerTimesWidget showToast={showToast} />
 
       {/* KARTU INTERAKTIF: SALDO KAS & AGENDA */}
       <div className="grid grid-cols-2 gap-3">
@@ -6230,7 +6226,14 @@ function AgendaTab({
       )}
 
       <div className="space-y-3">
-        {[...agendas].sort((a,b) => getAgendaTargetTimestamp(a) - getAgendaTargetTimestamp(b)).map(a => (
+        {[...agendas].sort((a, b) => {
+          const timeA = getAgendaTargetTimestamp(a);
+          const timeB = getAgendaTargetTimestamp(b);
+          if (timeB !== timeA) {
+            return timeB - timeA;
+          }
+          return Number(b.id || 0) - Number(a.id || 0);
+        }).map(a => (
           <div key={a.id} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex gap-4 items-start">
             <div className="bg-green-50 border border-green-100 p-2.5 rounded-xl text-center min-w-[64px] h-fit flex-shrink-0">
               <p className="text-[10px] font-black text-green-700 uppercase">{new Date(a.date).toLocaleDateString('id-ID', { month: 'short' })}</p>
