@@ -7,7 +7,8 @@ import {
   ArrowUp, ArrowDown, GripVertical, MapPin, Infinity as InfinityIcon, Phone,
   TrendingUp, TrendingDown, ArrowDownLeft, ArrowUpRight, Layers,
   Clock, ChevronDown, Check, Sparkles, Filter,
-  Bell, BellRing, Volume2, VolumeX
+  Bell, BellRing, Volume2, VolumeX,
+  User, Heart, BookOpen
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -1917,14 +1918,128 @@ function DashboardTab({
       )}
 
       {/* STATISTIK ANGGOTA KELUARGA */}
-      <div className="grid grid-cols-2 gap-3">
-        <StatCard title="Total Anggota" value={totAnggota} color="bg-white border-gray-100 text-gray-800" />
-        <StatCard title="Laki-laki" value={totLaki} color="bg-white border-gray-100 text-gray-800" />
-        <StatCard title="Perempuan" value={totPerempuan} color="bg-white border-gray-100 text-gray-800" />
-        <StatCard title="Masih Hidup" value={totHidup} color="bg-green-50 border-green-100 text-green-700" />
-        
-        <div onClick={() => setIsDeceasedModalOpen(true)} className="col-span-2 cursor-pointer active:scale-[0.98] transition-transform">
-           <StatCard title="Total Keluarga Meninggal (Klik detail)" value={allDeceased.length} color="bg-gray-800 border-gray-700 text-white shadow-md hover:bg-gray-700" />
+      <div className="space-y-3">
+        <div className="flex items-center justify-between px-1">
+          <div className="flex items-center gap-2">
+            <span className="w-1.5 h-4.5 rounded-full bg-emerald-600"></span>
+            <h3 className="text-xs sm:text-sm font-extrabold text-gray-800 tracking-tight uppercase">
+              Statistik Anggota Keluarga
+            </h3>
+          </div>
+          <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100/70 border border-emerald-200/80 px-2.5 py-0.5 rounded-full tabular-nums">
+            {totAnggota} Jiwa
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+          {/* 1. Total Anggota */}
+          <ModernStatCard 
+            title="Total Anggota"
+            value={totAnggota}
+            subtitle="Silsilah Keluarga"
+            badge="100%"
+            icon={<Users size={16} className="text-emerald-700" />}
+            iconBg="bg-emerald-500/10 border-emerald-500/20"
+            bgGradient="bg-gradient-to-br from-white via-slate-50/70 to-emerald-50/30"
+            borderColor="border-slate-200/90"
+            textColor="text-slate-900"
+            watermark={<Users className="absolute -right-2 -bottom-2 w-16 h-16 text-emerald-800/[0.04] group-hover:scale-110 group-hover:text-emerald-800/[0.07] transition-all duration-300 pointer-events-none" />}
+          />
+
+          {/* 2. Laki-laki */}
+          <ModernStatCard 
+            title="Laki-laki"
+            value={totLaki}
+            subtitle="Anggota & Pasangan"
+            badge={`${totAnggota > 0 ? Math.round((totLaki / totAnggota) * 100) : 0}%`}
+            icon={<User size={16} className="text-sky-700" />}
+            iconBg="bg-sky-500/10 border-sky-500/20"
+            bgGradient="bg-gradient-to-br from-white via-slate-50/70 to-sky-50/30"
+            borderColor="border-slate-200/90"
+            textColor="text-slate-900"
+            watermark={<User className="absolute -right-2 -bottom-2 w-16 h-16 text-sky-800/[0.04] group-hover:scale-110 group-hover:text-sky-800/[0.07] transition-all duration-300 pointer-events-none" />}
+          />
+
+          {/* 3. Perempuan */}
+          <ModernStatCard 
+            title="Perempuan"
+            value={totPerempuan}
+            subtitle="Anggota & Pasangan"
+            badge={`${totAnggota > 0 ? Math.round((totPerempuan / totAnggota) * 100) : 0}%`}
+            icon={<Heart size={16} className="text-rose-600" />}
+            iconBg="bg-rose-500/10 border-rose-500/20"
+            bgGradient="bg-gradient-to-br from-white via-slate-50/70 to-rose-50/30"
+            borderColor="border-slate-200/90"
+            textColor="text-slate-900"
+            watermark={<Heart className="absolute -right-2 -bottom-2 w-16 h-16 text-rose-800/[0.04] group-hover:scale-110 group-hover:text-rose-800/[0.07] transition-all duration-300 pointer-events-none" />}
+          />
+
+          {/* 4. Masih Hidup */}
+          <ModernStatCard 
+            title="Masih Hidup"
+            value={totHidup}
+            subtitle="Sehat & Berkah"
+            badge={`${totAnggota > 0 ? Math.round((totHidup / totAnggota) * 100) : 0}%`}
+            icon={<Sparkles size={16} className="text-emerald-700" />}
+            iconBg="bg-emerald-500/15 border-emerald-500/30"
+            bgGradient="bg-gradient-to-br from-emerald-50/90 via-teal-50/60 to-emerald-100/50"
+            borderColor="border-emerald-300/70"
+            textColor="text-emerald-950"
+            watermark={<Sparkles className="absolute -right-2 -bottom-2 w-16 h-16 text-emerald-800/[0.08] group-hover:scale-110 group-hover:text-emerald-800/[0.12] transition-all duration-300 pointer-events-none" />}
+          />
+
+          {/* 5. Total Keluarga Meninggal (Full Width, Elegan & Bermakna) */}
+          <div 
+            onClick={() => setIsDeceasedModalOpen(true)}
+            className="col-span-2 bg-gradient-to-r from-[#121d2d] via-[#1a293d] to-[#101b2a] text-white rounded-2xl sm:rounded-3xl p-4 sm:p-5 border border-amber-400/30 shadow-md hover:shadow-xl hover:border-amber-400/50 transition-all duration-300 cursor-pointer group active:scale-[0.99] relative overflow-hidden"
+            title="Klik untuk membuka daftar keluarga yang telah wafat"
+          >
+            {/* Subtle radial glow */}
+            <div 
+              className="absolute inset-0 opacity-25 pointer-events-none"
+              style={{
+                backgroundImage: `radial-gradient(circle at 10% 50%, rgba(245, 158, 11, 0.25) 0%, transparent 55%), radial-gradient(circle at 90% 50%, rgba(16, 185, 129, 0.2) 0%, transparent 55%)`
+              }}
+            />
+
+            {/* Watermark Icon */}
+            <BookOpen className="absolute -right-3 -bottom-3 w-24 h-24 text-white/[0.04] group-hover:scale-110 group-hover:text-white/[0.07] transition-all duration-300 pointer-events-none" />
+
+            <div className="relative z-10 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                {/* Icon Container */}
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center shrink-0 text-amber-300 shadow-inner group-hover:scale-105 transition-transform">
+                  <BookOpen size={20} />
+                </div>
+
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-xs sm:text-sm font-bold text-gray-100 group-hover:text-amber-200 transition-colors truncate">
+                      Total Keluarga Meninggal
+                    </h4>
+                    <span className="relative flex h-2 w-2 shrink-0">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
+                    </span>
+                  </div>
+                  <p className="text-[10.5px] sm:text-[11.5px] text-gray-400 group-hover:text-gray-300 transition-colors truncate mt-0.5">
+                    Lihat daftar silsilah yang telah wafat & kirim doa fatihah
+                  </p>
+                </div>
+              </div>
+
+              {/* Number & Detail Button */}
+              <div className="flex items-center gap-2.5 shrink-0">
+                <span className="text-2xl sm:text-3xl font-black text-amber-400 tabular-nums tracking-tight">
+                  {allDeceased.length}
+                </span>
+                <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-bold bg-white/10 hover:bg-white/20 border border-white/15 px-2.5 py-1 rounded-xl text-amber-300 group-hover:text-amber-200 transition">
+                  Detail <ChevronRight size={12} className="group-hover:translate-x-0.5 transition-transform" />
+                </span>
+                <ChevronRight size={16} className="text-amber-400/80 sm:hidden group-hover:translate-x-0.5 transition-transform" />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1953,6 +2068,63 @@ function DashboardTab({
           onClose={() => setIsDeceasedModalOpen(false)} 
         />
       )}
+    </div>
+  );
+}
+
+interface ModernStatCardProps {
+  title: string;
+  value: number;
+  subtitle?: string;
+  badge?: string;
+  icon: React.ReactNode;
+  bgGradient: string;
+  borderColor: string;
+  iconBg: string;
+  textColor: string;
+  watermark: React.ReactNode;
+}
+
+function ModernStatCard({
+  title,
+  value,
+  subtitle,
+  badge,
+  icon,
+  bgGradient,
+  borderColor,
+  iconBg,
+  textColor,
+  watermark
+}: ModernStatCardProps) {
+  return (
+    <div className={`p-3.5 sm:p-4 rounded-2xl sm:rounded-3xl border shadow-xs hover:shadow-md transition-all duration-200 relative overflow-hidden flex flex-col justify-between group ${bgGradient} ${borderColor}`}>
+      {watermark}
+      
+      <div className="relative z-10 flex items-center justify-between mb-2">
+        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border shadow-xs ${iconBg}`}>
+          {icon}
+        </div>
+        {badge && (
+          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-lg bg-black/5 text-gray-700 tabular-nums">
+            {badge}
+          </span>
+        )}
+      </div>
+
+      <div className="relative z-10">
+        <h3 className={`text-2xl sm:text-3xl font-black tracking-tight tabular-nums leading-none ${textColor}`}>
+          {value}
+        </h3>
+        <p className="text-xs font-bold text-gray-700 mt-1.5 truncate">
+          {title}
+        </p>
+        {subtitle && (
+          <p className="text-[10px] text-gray-500 font-medium truncate mt-0.5">
+            {subtitle}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
