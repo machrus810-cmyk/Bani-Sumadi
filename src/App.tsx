@@ -1272,18 +1272,17 @@ export default function BaniSumadiApp() {
 // MODAL LOGIN ADMIN (BY FALAH)
 // ==========================================
 function AdminLoginModal({ onLoginSuccess, onClose }: { onLoginSuccess: () => void; onClose: () => void }) {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [pin, setPin] = useState('');
   const [error, setError] = useState('');
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (username === 'Falah' && password === 'Cahragil85!?!') {
+    if (pin.trim() === '581001') {
       try { localStorage.setItem('bs_admin_auth', 'true'); } catch {}
       onLoginSuccess();
     } else {
-      setError('Username atau Kata kunci Admin salah!');
+      setError('PIN Admin salah!');
     }
   };
 
@@ -1297,7 +1296,7 @@ function AdminLoginModal({ onLoginSuccess, onClose }: { onLoginSuccess: () => vo
             </div>
             <div>
               <h2 className="font-black text-base">Login Admin</h2>
-              <p className="text-[10px] text-green-100">Khusus pengelola untuk mengubah data</p>
+              <p className="text-[10px] text-green-100">Masukkan PIN pengelola untuk mengubah data</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1.5 bg-white/20 rounded-full hover:bg-white/30 transition cursor-pointer">
@@ -1307,25 +1306,20 @@ function AdminLoginModal({ onLoginSuccess, onClose }: { onLoginSuccess: () => vo
 
         <form onSubmit={handleLogin} className="p-6 space-y-4">
           <div>
-            <label className="block text-xs font-bold text-gray-600 mb-1">Username Admin</label>
+            <label className="block text-xs font-bold text-gray-600 mb-1.5">PIN Admin</label>
             <input 
-              type="text" 
-              placeholder="Username" 
-              className="w-full border-2 p-3 rounded-xl outline-none focus:border-green-500 font-medium" 
-              value={username} 
-              onChange={e => setUsername(e.target.value)} 
+              type="password"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={6}
+              placeholder="Masukkan PIN" 
+              className="w-full border-2 p-3 rounded-xl outline-none focus:border-green-500 font-bold text-center tracking-[0.4em] text-lg" 
+              value={pin} 
+              onChange={e => {
+                setPin(e.target.value);
+                if (error) setError('');
+              }} 
               autoFocus
-              required 
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-gray-600 mb-1">Kata Kunci Admin</label>
-            <input 
-              type="password" 
-              placeholder="Kata Kunci Admin" 
-              className="w-full border-2 p-3 rounded-xl outline-none focus:border-green-500 font-medium" 
-              value={password} 
-              onChange={e => setPassword(e.target.value)} 
               required 
             />
           </div>
@@ -7346,11 +7340,13 @@ function ModalFormIuranItem({
       isAlive: boolean;
       gender: 'L' | 'P';
       domicile?: string;
+      seq: number;
     }> = [];
 
     const memberMap = new Map<number, Member>();
     members.forEach(m => memberMap.set(m.id, m));
 
+    let seqCounter = 0;
     members.forEach(m => {
       const gen = getMemberGeneration(m, members);
       const genLabel = getGenerationLabel(gen);
@@ -7375,7 +7371,8 @@ function ModalFormIuranItem({
         subtitle: parentDesc || genLabel.subtitle,
         isAlive: m.isAlive ?? true,
         gender: m.gender || 'L',
-        domicile: m.domicile
+        domicile: m.domicile,
+        seq: seqCounter++
       });
 
       // Tambahkan data pasangan terdaftar (jika ada)
@@ -7389,15 +7386,16 @@ function ModalFormIuranItem({
           subtitle: `Pasangan dari ${m.name}`,
           isAlive: sp.isAlive ?? true,
           gender: m.gender === 'L' ? 'P' : 'L',
-          domicile: sp.domicile || m.domicile
+          domicile: sp.domicile || m.domicile,
+          seq: seqCounter++
         });
       });
     });
 
-    // Urutkan berdasarkan generasi 1, 2, 3, dst, lalu nama
+    // Urutkan berdasarkan generasi 1, 2, 3, dst, mengikuti urutan daftar anggota
     return list.sort((a, b) => {
       if (a.gen !== b.gen) return a.gen - b.gen;
-      return a.name.localeCompare(b.name, 'id');
+      return a.seq - b.seq;
     });
   }, [members]);
 
