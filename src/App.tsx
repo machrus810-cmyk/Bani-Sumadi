@@ -945,14 +945,21 @@ export default function BaniSumadiApp() {
   }, [latestKasSession, transactions]);
   const formatRupiah = (number: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number);
 
+  const [currentNow, setCurrentNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentNow(Date.now());
+    }, 15000);
+    return () => clearInterval(timer);
+  }, []);
+
   const nextAgenda = useMemo(() => {
     if (agendas.length === 0) return null;
-    const nowTime = Date.now();
     const sorted = [...agendas].sort((a, b) => getAgendaTargetTimestamp(a) - getAgendaTargetTimestamp(b));
     // Cari agenda terdekat yang belum lewat atau sedang berlangsung (toleransi rentang 18 jam)
-    const upcoming = sorted.find(a => getAgendaTargetTimestamp(a) + (18 * 60 * 60 * 1000) > nowTime);
-    return upcoming || sorted[sorted.length - 1] || null;
-  }, [agendas]);
+    const upcoming = sorted.find(a => getAgendaTargetTimestamp(a) + (18 * 60 * 60 * 1000) > currentNow);
+    return upcoming || null;
+  }, [agendas, currentNow]);
 
   // State untuk agenda yang alarm suaranya sedang berdering aktif
   const [ringingAgenda, setRingingAgenda] = useState<Agenda | null>(null);
@@ -1757,8 +1764,8 @@ function DashboardTab({
           title="Klik untuk membuka menu Agenda"
         >
           <div className="flex justify-between items-start z-10">
-            <p className="text-[11px] font-bold tracking-wider opacity-90 uppercase truncate max-w-[90px]">
-              {nextAgenda ? 'AGENDA DEKAT' : 'AGENDA'}
+            <p className="text-[11px] font-bold tracking-wider opacity-90 uppercase truncate max-w-[100px]">
+              AGENDA DEKAT
             </p>
             <span className="text-[9px] bg-white/20 backdrop-blur-xs px-2 py-0.5 rounded-full font-bold flex items-center gap-0.5 group-hover:bg-white/30 transition">
               Lihat <ChevronRight size={10} className="group-hover:translate-x-0.5 transition-transform" />
@@ -1774,18 +1781,17 @@ function DashboardTab({
                 <p className="text-[10px] font-semibold text-blue-100 truncate mt-0.5">{nextAgenda.title}</p>
               </>
             ) : (
-              <>
-                <span className="text-sm font-bold opacity-90">Belum ada agenda</span>
-                <p className="text-[9px] text-blue-100/70 font-medium">Klik untuk tambah agenda</p>
-              </>
+              <p className="text-xs sm:text-sm font-bold text-white/95 leading-snug">
+                Tidak ada agenda terdekat
+              </p>
             )}
           </div>
           <Calendar className="absolute -right-2 -bottom-2 opacity-15 w-18 h-18 group-hover:scale-110 group-hover:opacity-25 transition-all duration-300 pointer-events-none" />
         </div>
       </div>
 
-      {/* FITUR HITUNGAN MUNDUR DARI AGENDA TERDEKAT */}
-      {nextAgenda ? (
+      {/* FITUR HITUNGAN MUNDUR DARI AGENDA TERDEKAT (OTOMATIS TAMPIL HANYA JIKA ADA AGENDA TERDEKAT) */}
+      {nextAgenda && (
         <AgendaCountdownCard 
           agenda={nextAgenda} 
           onNavigateTab={onNavigateTab}
@@ -1793,30 +1799,6 @@ function DashboardTab({
           isAlarmActive={ringingAgenda?.id === nextAgenda.id}
           onStopAlarm={onStopAlarm}
         />
-      ) : (
-        <div 
-          onClick={() => onNavigateTab?.('agenda')}
-          className="bg-gradient-to-br from-emerald-950 via-teal-900 to-indigo-950 rounded-3xl p-4 sm:p-5 text-white shadow-lg border border-emerald-500/30 relative overflow-hidden cursor-pointer hover:shadow-2xl transition-all duration-300 group"
-          title="Klik untuk membuka menu Agenda Keluarga"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <span className="flex h-2.5 w-2.5 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400"></span>
-              </span>
-              <span className="text-[11px] font-black uppercase tracking-wider text-emerald-300 flex items-center gap-1.5">
-                <Clock size={13} className="text-emerald-400" />
-                Hitungan Mundur Agenda Terdekat
-              </span>
-            </div>
-            <span className="text-[10px] bg-white/10 hover:bg-white/20 border border-white/15 px-2.5 py-1 rounded-full font-bold flex items-center gap-1 transition">
-              Kelola Agenda <ChevronRight size={12} />
-            </span>
-          </div>
-          <p className="text-sm font-bold text-gray-200">Belum ada agenda keluarga terdekat yang dijadwalkan.</p>
-          <p className="text-xs text-emerald-200/70 mt-1">Klik di sini untuk melihat kalender atau menambahkan agenda pertemuan/reuni baru.</p>
-        </div>
       )}
 
       {/* SLIDER FOTO DASHBOARD DENGAN CLICK TO ENLARGE YANG AKURAT */}
