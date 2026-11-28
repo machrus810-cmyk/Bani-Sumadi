@@ -18,10 +18,36 @@
     <meta property="og:image" content="/logo.jpg" />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   </head>
-  <body class="bg-gray-100">
-    <div id="root"></div>
+  <body style="margin:0;background:#14532d;">
+    <div id="root">
+      <div style="position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(to bottom,#14532d,#166534,#022c22);color:#fff;font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;text-align:center;">
+        <div style="position:relative;margin-bottom:24px;">
+          <div style="width:128px;height:128px;border-radius:9999px;padding:6px;background:linear-gradient(to top right,#fbbf24,#fde68a,#eab308);box-shadow:0 25px 50px -12px rgba(0,0,0,0.45);">
+            <img src="/logo.jpg" alt="Logo Keluarga Besar KH. Sumadi" style="width:100%;height:100%;object-fit:cover;border-radius:9999px;display:block;" />
+          </div>
+        </div>
+        <div style="max-width:320px;padding:0 24px;">
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;font-weight:900;color:#fcd34d;">Silsilah &amp; Kerukunan</div>
+          <div style="font-size:24px;font-weight:900;line-height:1.2;letter-spacing:0.025em;margin-top:6px;">
+            Keluarga Besar<br /><span style="color:#fcd34d;">KH. SUMADI</span>
+          </div>
+          <div style="font-size:12px;color:rgba(220,252,231,0.9);font-weight:500;margin-top:10px;">
+            &ldquo;Menjalin Silaturrahim, Mempererat Persaudaraan&rdquo;
+          </div>
+        </div>
+        <div style="margin-top:32px;display:flex;flex-direction:column;align-items:center;gap:8px;">
+          <div style="width:144px;height:6px;background:rgba(255,255,255,0.2);border-radius:9999px;overflow:hidden;">
+            <div style="width:100%;height:100%;background:linear-gradient(to right,#fbbf24,#fde047);border-radius:9999px;"></div>
+          </div>
+          <span style="font-size:10px;color:#bbf7d0;font-weight:600;letter-spacing:0.05em;">Memuat Aplikasi...</span>
+        </div>
+        <div style="position:absolute;bottom:24px;font-size:10px;color:rgba(187,247,208,0.7);font-weight:500;letter-spacing:0.025em;">
+          Bani Sumadi • Official Application
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

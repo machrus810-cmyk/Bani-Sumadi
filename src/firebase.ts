@@ -28,16 +28,19 @@ import firebaseConfig from '../firebase-applet-config.json';
 // Initialize Firebase App
 export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-// Initialize Firestore with IndexedDB persistent local cache for offline support
+// Initialize Firestore with IndexedDB persistent local cache and long-polling transport
+// to prevent WebChannel [code=unavailable] connection drops in mobile/proxy/iframe networks
+const firestoreSettings = {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+  experimentalForceLongPolling: true,
+  ignoreUndefinedProperties: true,
+};
+
 let firestoreDb;
 try {
   firestoreDb = firebaseConfig.firestoreDatabaseId 
-    ? initializeFirestore(app, {
-        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
-      }, firebaseConfig.firestoreDatabaseId)
-    : initializeFirestore(app, {
-        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
-      });
+    ? initializeFirestore(app, firestoreSettings, firebaseConfig.firestoreDatabaseId)
+    : initializeFirestore(app, firestoreSettings);
 } catch (e) {
   firestoreDb = firebaseConfig.firestoreDatabaseId 
     ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
@@ -93,10 +96,14 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 
 // Validate connection on boot
 export async function testConnection() {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return;
+  }
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
   } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (msg.includes('the client is offline') || msg.includes('unavailable')) {
       console.warn("Firebase client is currently offline. Operating with cache.");
     }
   }

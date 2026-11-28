@@ -55,7 +55,7 @@ export default defineConfig(() => {
           short_name: 'Bani Sumadi',
           description: 'Aplikasi silsilah keluarga, agenda, kas, dan iuran Keluarga Besar KH. SUMADI by Falah.',
           theme_color: '#15803d',
-          background_color: '#f3f4f6',
+          background_color: '#14532d',
           display: 'standalone',
           start_url: '/',
           scope: '/',

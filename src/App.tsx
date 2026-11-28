@@ -16,7 +16,6 @@ import {
   auth, 
   getColRef, 
   getDocRef, 
-  signInAnonymously, 
   signInWithCustomToken, 
   getDocs, 
   getDoc,
@@ -783,13 +782,6 @@ export default function BaniSumadiApp() {
             console.warn("Custom token auth skipped:", tokenErr);
           }
         }
-        if (!auth.currentUser) {
-          try {
-            await signInAnonymously(auth);
-          } catch (anonErr) {
-            console.warn("Anonymous auth notice:", anonErr);
-          }
-        }
       } catch (e) {
         console.warn("Firebase init notice:", e);
       } finally {
@@ -1036,12 +1028,10 @@ export default function BaniSumadiApp() {
     setRingingAgenda(null);
   };
 
-  if (!isFirebaseReady) return <div className="min-h-screen bg-[#F0FDF4] flex items-center justify-center font-bold text-green-700">Menghubungkan Database Firebase...</div>;
-
   return (
     <div className="min-h-screen bg-gray-100 flex justify-center font-sans text-gray-800">
       {/* LOGO PEMBUKA / OPENING SPLASH SCREEN */}
-      <SplashScreen minDisplayTimeMs={1700} />
+      <SplashScreen minDisplayTimeMs={500} />
 
       <div className="w-full max-w-md bg-white shadow-xl relative pb-20 flex flex-col min-h-screen overflow-hidden">
         
